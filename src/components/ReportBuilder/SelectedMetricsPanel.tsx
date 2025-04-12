@@ -4,8 +4,12 @@ import React from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useReportBuilder } from '@/context/ReportBuilderContext';
-import { DraggableMetric } from './DraggableMetric';
 import { SortableMetric } from './SortableMetric';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Plus, Trash2 } from 'lucide-react';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, DragOverlay, Active } from '@dnd-kit/core';
+import { useState } from 'react';
 
 export const SelectedMetricsPanel: React.FC = () => {
   const { selectedMetrics, removeMetric } = useReportBuilder();

@@ -3,7 +3,9 @@
 import Link from 'next/link';
 // import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip'; // Removed complex tooltip
 import { Avatar, AvatarFallback, AvatarImage } from './avatar';
-import { clsx } from 'clsx';
+import { Card, CardHeader, CardTitle, CardContent } from './card';
+// Remove unused clsx import
+import { Icons } from '@/components/Icons';
 
 interface DashboardHeaderProps {
   userName: string;

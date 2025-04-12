@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Metric, TimeRange, ReportConfig, MetricType } from '@/lib/types';
+import { Metric, TimeRange, ReportConfig, Dimension, MetricDefinition } from '@/lib/types';
 
 // Define available metrics
 const AVAILABLE_METRICS: Metric[] = [
@@ -51,7 +51,7 @@ const getLast7Days = (): TimeRange => {
 };
 
 // Get last 28 days range
-const getLast28Days = (): TimeRange => {
+const _getLast28Days = (): TimeRange => {
   const endDate = new Date();
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - 28);
@@ -66,7 +66,7 @@ const getLast28Days = (): TimeRange => {
 };
 
 // Get last 3 months range
-const getLast3Months = (): TimeRange => {
+const _getLast3Months = (): TimeRange => {
   const endDate = new Date();
   const startDate = new Date();
   startDate.setMonth(startDate.getMonth() - 3);
