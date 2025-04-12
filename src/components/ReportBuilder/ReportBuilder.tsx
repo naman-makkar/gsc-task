@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import { 
   DndContext, 
   DragEndEvent,
@@ -14,10 +14,7 @@ import {
   closestCenter
 } from '@dnd-kit/core';
 import {
-  arrayMove,
-  SortableContext,
   sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { useReportBuilder } from '@/context/ReportBuilderContext';
 import { Metric } from '@/lib/types';
@@ -34,13 +31,13 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ siteUrl }) => {
   const { 
     selectedMetrics, 
     addMetric, 
-    removeMetric, 
+    setMetrics,
     availableMetrics,
     reorderSelectedMetrics,
     getReportConfig
   } = useReportBuilder();
   
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [_activeId, setActiveId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Configure the sensors
