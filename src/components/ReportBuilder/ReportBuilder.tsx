@@ -31,7 +31,6 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ siteUrl }) => {
   const { 
     selectedMetrics, 
     addMetric, 
-    setMetrics,
     availableMetrics,
     reorderSelectedMetrics,
     getReportConfig

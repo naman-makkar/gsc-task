@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Metric, TimeRange, ReportConfig, Dimension, MetricDefinition } from '@/lib/types';
+import { Metric, TimeRange, ReportConfig } from '@/lib/types';
 
 // Define available metrics
 const AVAILABLE_METRICS: Metric[] = [

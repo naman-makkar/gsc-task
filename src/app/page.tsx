@@ -3,15 +3,12 @@
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect } from 'react';
-import { useSession } from 'next-auth/react';
-import { Button } from "@/components/ui/button";
 
 export default function Home() {
   const _router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const error = searchParams.get('error');
-  const { data: session } = useSession();
 
   // Function to handle Google login
   const handleGoogleLogin = async () => {

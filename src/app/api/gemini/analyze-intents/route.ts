@@ -4,6 +4,9 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { IntentAnalysis, batchAnalyzeIntents } from '@/lib/gemini';
 import { getExistingIntents, storeIntentAnalysis } from '@/lib/intent-storage';
 
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+
 // Helper for default analysis structure
 const defaultAnalysis = (query: string): IntentAnalysis => ({
   query,

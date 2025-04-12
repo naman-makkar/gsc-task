@@ -79,11 +79,11 @@ export default function ReportResultsPage() {
   const searchParams = useSearchParams();
   const reportId = searchParams.get('reportId');
   
-  const [reportData, setReportData] = useState<ReportData | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingIntents, setIsLoadingIntents] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [_reportData, _setReportData] = useState<ReportData | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isLoadingIntents, setIsLoadingIntents] = useState(false);
   const [intents, setIntents] = useState<IntentAnalysis[]>([]);
   const [isAnalyzingIntents, setIsAnalyzingIntents] = useState(false);
   const [intentsError, setIntentsError] = useState<string | null>(null);
@@ -180,7 +180,7 @@ export default function ReportResultsPage() {
         }
 
         if (loadedReportData) {
-            setReportData(loadedReportData);
+            _setReportData(loadedReportData);
              // Load intents if reportId is available (either from URL or potentially from loadedReportData if stored)
             const effectiveReportId = reportId || (loadedReportData as any)?.reportId; // Adjust if reportId is stored differently
             if (effectiveReportId) {
@@ -191,7 +191,7 @@ export default function ReportResultsPage() {
       } catch (err: any) {
         console.error("Error loading report results page:", err);
         setError(err.message || 'Failed to load page data');
-        setReportData(null); // Clear report data on error
+        _setReportData(null); // Clear report data on error
         setIntents([]); // Clear intents on error
         setUserProfile(null); // Clear profile on error if necessary
       } finally {
@@ -204,8 +204,8 @@ export default function ReportResultsPage() {
   
   // Prepare data for table
   const tableData = useMemo<ReportRow[]>(() => {
-    if (!reportData?.data) return [];
-    return reportData.data.map(row => {
+    if (!_reportData?.data) return [];
+    return _reportData.data.map(row => {
       const query = row.keys[0];
       const intentData = intents.find(i => i.query === query);
       return {
@@ -220,13 +220,13 @@ export default function ReportResultsPage() {
         main_keywords: intentData?.main_keywords,
       };
     });
-  }, [reportData, intents]);
+  }, [_reportData, intents]);
 
   // Define table columns
   const columns = useMemo<ColumnDef<ReportRow>[]>(() => {
-    if (!reportData?.request?.metrics) return [];
+    if (!_reportData?.request?.metrics) return [];
 
-    const metricColumns: ColumnDef<ReportRow>[] = reportData.request.metrics.map(metric => ({
+    const metricColumns: ColumnDef<ReportRow>[] = _reportData.request.metrics.map(metric => ({
       accessorKey: metric,
       header: ({ column }) => (
         <button
@@ -291,7 +291,7 @@ export default function ReportResultsPage() {
         cell: info => <span className="text-xs text-gray-600 dark:text-gray-400">{info.getValue<string>() || 'N/A'}</span>,
       },
     ];
-  }, [reportData, intents]);
+  }, [_reportData, intents]);
 
   // TanStack Table instance
   const table = useReactTable({
@@ -316,7 +316,7 @@ export default function ReportResultsPage() {
 
   // Analysis & Export Handlers
   const handleAnalyzeIntents = async () => {
-    if (!reportData || !reportId) return;
+    if (!_reportData || !reportId) return;
     
     try {
       setIsAnalyzingIntents(true);
@@ -324,7 +324,7 @@ export default function ReportResultsPage() {
       setRateLimitInfo(null);
       setIsLoadingIntents(true);
       
-      const visibleQueries = reportData.data.slice(0, 100).map(row => row.keys[0]);
+      const visibleQueries = _reportData.data.slice(0, 100).map(row => row.keys[0]);
       
       const intentResponse = await fetch(`/api/gemini/report-intents?reportId=${reportId}`);
       
@@ -393,24 +393,24 @@ export default function ReportResultsPage() {
   };
   
   const handleExportCSVWithIntents = () => {
-    if (!reportData || intents.length === 0) return;
+    if (!_reportData || intents.length === 0) return;
     
     const headers = [
       'Query',
-      ...reportData.request.metrics,
+      ..._reportData.request.metrics,
       'Intent',
       'Category',
       'Funnel Stage',
       'Main Keywords'
     ];
     
-    const rows = reportData.data.map(row => {
+    const rows = _reportData.data.map(row => {
       const query = row.keys[0];
       const intentData = intents.find(i => i.query === query);
       
       return [
         `"${query.replace(/"/g, '""')}"`,
-        ...reportData.request.metrics.map(metric => row[metric] || 0),
+        ..._reportData.request.metrics.map(metric => row[metric] || 0),
         intentData?.intent || 'Unknown',
         intentData?.category || 'Unknown',
         intentData?.funnel_stage || 'Unknown',
@@ -434,12 +434,12 @@ export default function ReportResultsPage() {
   };
   
   const handleExportCSV = () => {
-    if (!reportData) return;
+    if (!_reportData) return;
     
-    const headers = ['Query', ...reportData.request.metrics];
-    const rows = reportData.data.map(row => [
+    const headers = ['Query', ..._reportData.request.metrics];
+    const rows = _reportData.data.map(row => [
       `"${row.keys[0].replace(/"/g, '""')}"`,
-      ...reportData.request.metrics.map(metric => row[metric] || 0)
+      ..._reportData.request.metrics.map(metric => row[metric] || 0)
     ]);
     
     const csvContent = [
@@ -459,17 +459,17 @@ export default function ReportResultsPage() {
   
   // Calculate summary totals
   const summaryTotals = useMemo(() => {
-    if (!reportData?.data) return { totalClicks: 0, totalImpressions: 0 };
-    return reportData.data.reduce((acc, row) => {
+    if (!_reportData?.data) return { totalClicks: 0, totalImpressions: 0 };
+    return _reportData.data.reduce((acc, row) => {
       acc.totalClicks += row.clicks || 0;
       acc.totalImpressions += row.impressions || 0;
       return acc;
     }, { totalClicks: 0, totalImpressions: 0 });
-  }, [reportData]);
+  }, [_reportData]);
   
   // --- Handler for Exporting to Google Sheets ---
   const handleExportToSheets = async () => {
-    if (!reportData || !tableData) {
+    if (!_reportData || !tableData) {
       setExportSheetError('No report data available to export.');
       return;
     }
@@ -485,7 +485,7 @@ export default function ReportResultsPage() {
       // Order matters! Must match the desired sheet output.
       const explicitHeaders = [
           'Query', 
-          ...(reportData.request.metrics || []), // Include dynamic metrics
+          ...(_reportData.request.metrics || []), // Include dynamic metrics
           // Only include intent headers if intent data exists
           ...(intents.length > 0 ? ['Intent', 'Category', 'Funnel Stage', 'Main Keywords'] : []) 
       ];
@@ -493,7 +493,7 @@ export default function ReportResultsPage() {
       // Use the currently filtered and sorted rows from the table instance for export
       const rowsToExport = table.getRowModel().rows.map(row => row.original); 
       
-      const reportTitle = `GSC Report - ${reportData.request.siteUrl} - ${new Date().toISOString().slice(0, 10)}`;
+      const reportTitle = `GSC Report - ${_reportData.request.siteUrl} - ${new Date().toISOString().slice(0, 10)}`;
 
       // 2. Call the backend API endpoint
       console.log('[handleExportToSheets] Sending headers:', explicitHeaders);
@@ -553,7 +553,7 @@ export default function ReportResultsPage() {
   }
 
   // Error state (Consistent Styling)
-  if (error || !reportData) {
+  if (error || !_reportData) {
     // Check if the error is due to missing profile, otherwise show general error
     const isAuthError = error?.includes('profile') || !userProfile;
     return (
@@ -618,9 +618,9 @@ export default function ReportResultsPage() {
             <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-200">
               Report Results
             </h1>
-            {reportData.request && (
+            {_reportData.request && (
                <p className="text-gray-500 dark:text-gray-400 mt-1">
-                 For site: <span className="font-medium text-gray-700 dark:text-gray-300">{reportData.request.siteUrl}</span> | Date Range: <span className="font-medium text-gray-700 dark:text-gray-300">{reportData.request.timeRange.startDate} to {reportData.request.timeRange.endDate}</span>
+                 For site: <span className="font-medium text-gray-700 dark:text-gray-300">{_reportData.request.siteUrl}</span> | Date Range: <span className="font-medium text-gray-700 dark:text-gray-300">{_reportData.request.timeRange.startDate} to {_reportData.request.timeRange.endDate}</span>
                </p>
             )}
           </div>
