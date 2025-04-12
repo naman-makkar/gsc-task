@@ -209,12 +209,12 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ siteUrl }) => {
     >
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Build Your GSC Report</h1>
-          <p className="text-gray-600 mt-2">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-200">Build Your GSC Report</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-2">
             Drag and drop metrics, select a time range, and generate your custom report.
             {siteUrl && (
               <span className="block mt-1 text-sm">
-                Site: <span className="font-medium">{siteUrl}</span>
+                Site: <span className="font-medium text-gray-800 dark:text-gray-300">{siteUrl}</span>
               </span>
             )}
           </p>
@@ -236,7 +236,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ siteUrl }) => {
             className={`
               px-6 py-3 rounded-lg text-white font-medium transition-colors
               ${isSubmitting || selectedMetrics.length === 0
-                ? 'bg-gray-400 cursor-not-allowed'
+                ? 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed'
                 : 'bg-blue-600 hover:bg-blue-700'
               }
             `}

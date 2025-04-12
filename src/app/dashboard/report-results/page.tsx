@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
+import { Loader2, AlertTriangle, ArrowLeft, Calendar, FileText, BrainCircuit, Download, Sheet, CheckCircle, XCircle } from 'lucide-react';
 import { IntentAnalysis, SEOIntent } from '@/lib/gemini';
 import {
   useReactTable,
@@ -15,6 +17,9 @@ import {
   ColumnFiltersState,
   ColumnDef,
 } from '@tanstack/react-table';
+
+import AnimatedPageWrapper from '@/components/ui/AnimatedPageWrapper';
+import DashboardHeader from '@/components/ui/DashboardHeader';
 
 interface ReportData {
   success: boolean;
@@ -42,22 +47,29 @@ interface ReportRow {
   main_keywords?: IntentAnalysis['main_keywords'];
 }
 
-// Helper component for intent badges
+// Add UserProfile interface
+interface UserProfile {
+  name: string;
+  email: string;
+  avatar?: string;
+}
+
+// Helper component for intent badges (with dark mode)
 const IntentBadge: React.FC<{ intent: SEOIntent | undefined }> = ({ intent }) => {
   const getIntentColor = (intent: SEOIntent | undefined): string => {
     switch (intent) {
-      case 'Informational': return 'bg-blue-100 text-blue-800';
-      case 'Navigational': return 'bg-purple-100 text-purple-800';
-      case 'Transactional': return 'bg-green-100 text-green-800';
-      case 'Commercial Investigation': return 'bg-orange-100 text-orange-800';
-      case 'Mixed': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'Informational': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+      case 'Navigational': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
+      case 'Transactional': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+      case 'Commercial Investigation': return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
+      case 'Mixed': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
     }
   };
 
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getIntentColor(intent)}`}>
-      {intent || 'Unknown'}
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getIntentColor(intent)}`}>
+      {intent || 'N/A'}
     </span>
   );
 };
@@ -68,6 +80,7 @@ export default function ReportResultsPage() {
   const reportId = searchParams.get('reportId');
   
   const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingIntents, setIsLoadingIntents] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +93,7 @@ export default function ReportResultsPage() {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
-  // New state variables for Export to Sheets
+  // State variables for Export to Sheets
   const [isExportingSheet, setIsExportingSheet] = useState(false);
   const [exportSheetError, setExportSheetError] = useState<string | null>(null);
   const [exportSheetSuccessUrl, setExportSheetSuccessUrl] = useState<string | null>(null);
@@ -116,33 +129,49 @@ export default function ReportResultsPage() {
   }, []);
 
   useEffect(() => {
-    const loadReportAndIntents = async () => {
+    const loadPageData = async () => {
       setIsLoading(true);
       setError(null);
       setIntentsError(null);
-      
       let loadedReportData: ReportData | null = null;
-      
+
       try {
-        // 1. Try to load report data from localStorage
+        // Fetch Profile first, as it's needed for header
+        const profileResponse = await fetch('/api/user/profile');
+        if (!profileResponse.ok) {
+          if (profileResponse.status === 401) {
+            router.push('/');
+            return;
+          }
+          throw new Error('Failed to load user profile'); // Critical error
+        }
+        const profileData = await profileResponse.json();
+        setUserProfile(profileData);
+
+        // Now handle report data loading (localStorage or Supabase)
         const storedData = localStorage.getItem('lastReportData');
         if (storedData) {
-          loadedReportData = JSON.parse(storedData);
-          setReportData(loadedReportData);
+            try {
+                loadedReportData = JSON.parse(storedData);
+                // Optional: Verify if stored data matches reportId if necessary
+                // if (reportId && loadedReportData?.request?.reportId !== reportId) { loadedReportData = null; }
+            } catch (e) {
+                console.error("Error parsing stored report data:", e);
+                localStorage.removeItem('lastReportData'); // Clear corrupted data
+                loadedReportData = null;
+            }
         }
-        
-        // 2. If not in localStorage or doesn't match reportId, load from Supabase
-        if ((!loadedReportData || !reportId) && reportId) {
+
+        if (!loadedReportData && reportId) {
           console.log(`Loading report ${reportId} from Supabase...`);
-          const response = await fetch(`/api/reports/get?reportId=${reportId}`);
-          if (!response.ok) {
+          const reportApiResponse = await fetch(`/api/reports/get?reportId=${reportId}`);
+          if (!reportApiResponse.ok) {
             throw new Error('Failed to load report from database');
           }
-          const result = await response.json();
+          const result = await reportApiResponse.json();
           if (result.success && result.report) {
-            loadedReportData = result.report.data; // The actual report data is nested
-            setReportData(loadedReportData);
-            localStorage.setItem('lastReportData', JSON.stringify(loadedReportData));
+            loadedReportData = result.report.data; // Assuming report data is nested
+            // No need to save back to localStorage here, it was loaded because it wasn't there or didn't match
           } else {
              throw new Error(result.error || 'Report not found in database');
           }
@@ -150,30 +179,28 @@ export default function ReportResultsPage() {
             throw new Error('No report ID specified and no data in local storage.');
         }
 
-        // 3. If report data was loaded successfully, load existing intents
-        if (loadedReportData && reportId) {
-           await loadIntents(reportId);
+        if (loadedReportData) {
+            setReportData(loadedReportData);
+             // Load intents if reportId is available (either from URL or potentially from loadedReportData if stored)
+            const effectiveReportId = reportId || (loadedReportData as any)?.reportId; // Adjust if reportId is stored differently
+            if (effectiveReportId) {
+                await loadIntents(effectiveReportId);
+            }
         }
-        
+
       } catch (err: any) {
-        console.error("Error loading report/intents:", err);
-        setError(err.message || 'Failed to load report data');
+        console.error("Error loading report results page:", err);
+        setError(err.message || 'Failed to load page data');
         setReportData(null); // Clear report data on error
         setIntents([]); // Clear intents on error
+        setUserProfile(null); // Clear profile on error if necessary
       } finally {
         setIsLoading(false);
       }
     };
-    
-    if (reportId) {
-        loadReportAndIntents();
-    } else if (localStorage.getItem('lastReportData')) {
-        loadReportAndIntents(); 
-    } else {
-        setError('No report ID provided.');
-        setIsLoading(false);
-    }
-  }, [reportId, loadIntents]);
+
+    loadPageData();
+  }, [reportId, router, loadIntents]); // Added router dependency
   
   // Prepare data for table
   const tableData = useMemo<ReportRow[]>(() => {
@@ -202,12 +229,12 @@ export default function ReportResultsPage() {
     const metricColumns: ColumnDef<ReportRow>[] = reportData.request.metrics.map(metric => ({
       accessorKey: metric,
       header: ({ column }) => (
-        <button 
-          className="flex items-center space-x-1 text-xs font-medium text-gray-600 uppercase tracking-wider hover:text-gray-800"
+        <button
+          className="flex items-center space-x-1 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
         >
           <span>{metric}</span>
-          {column.getIsSorted() === 'asc' ? ' 🔼' : column.getIsSorted() === 'desc' ? ' 🔽' : ''}
+          {column.getIsSorted() === 'asc' ? <span className="ml-1">🔼</span> : column.getIsSorted() === 'desc' ? <span className="ml-1">🔽</span> : ''}
         </button>
       ),
       cell: info => {
@@ -223,12 +250,12 @@ export default function ReportResultsPage() {
       {
         accessorKey: 'query',
         header: ({ column }) => (
-           <button 
-             className="flex items-center space-x-1 text-xs font-medium text-gray-600 uppercase tracking-wider hover:text-gray-800"
+           <button
+             className="flex items-center space-x-1 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
              onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
            >
               <span>Query</span>
-              {column.getIsSorted() === 'asc' ? ' 🔼' : column.getIsSorted() === 'desc' ? ' 🔽' : ''}
+              {column.getIsSorted() === 'asc' ? <span className="ml-1">🔼</span> : column.getIsSorted() === 'desc' ? <span className="ml-1">🔽</span> : ''}
            </button>
         ),
         cell: info => {
@@ -236,11 +263,11 @@ export default function ReportResultsPage() {
           const keywords = info.row.original.main_keywords;
           return (
             <div className="relative group">
-              <span className="cursor-help border-b border-dotted border-gray-400">{query}</span>
+              <span className="cursor-help border-b border-dotted border-gray-400 dark:border-gray-500 dark:text-gray-300">{query}</span>
               {keywords && keywords.length > 0 && (
-                <div className="absolute z-10 invisible group-hover:visible bg-black text-white text-xs rounded py-1 px-2 bottom-full left-1/2 transform -translate-x-1/2 mb-1 whitespace-nowrap">
+                <div className="absolute z-10 invisible group-hover:visible bg-black dark:bg-gray-700 text-white dark:text-gray-200 text-xs rounded py-1 px-2 bottom-full left-1/2 transform -translate-x-1/2 mb-1 whitespace-nowrap shadow-lg">
                   Keywords: {keywords.join(', ')}
-                  <svg className="absolute text-black h-2 w-full left-0 top-full" x="0px" y="0px" viewBox="0 0 255 255" xmlSpace="preserve"><polygon className="fill-current" points="0,0 127.5,127.5 255,0"/></svg>
+                  <svg className="absolute text-black dark:text-gray-700 h-2 w-full left-0 top-full" x="0px" y="0px" viewBox="0 0 255 255" xmlSpace="preserve"><polygon className="fill-current" points="0,0 127.5,127.5 255,0"/></svg>
                 </div>
               )}
             </div>
@@ -248,36 +275,25 @@ export default function ReportResultsPage() {
         },
       },
       ...metricColumns,
-      ...(intents.length > 0 ? [
-        {
-          accessorKey: 'intent',
-          header: ({ column }) => (
-             <button 
-               className="flex items-center space-x-1 text-xs font-medium text-gray-600 uppercase tracking-wider hover:text-gray-800"
-               onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-             >
-                <span>Intent</span>
-                {column.getIsSorted() === 'asc' ? ' 🔼' : column.getIsSorted() === 'desc' ? ' 🔽' : ''}
-             </button>
-          ),
-          cell: info => <IntentBadge intent={info.getValue<SEOIntent>()} />,
-          filterFn: 'equals',
-        },
-        {
-          accessorKey: 'category',
-          header: <span className="text-xs font-medium text-gray-600 uppercase tracking-wider">Category</span>,
-          cell: info => info.getValue() || '-',
-        },
-        {
-          accessorKey: 'funnel_stage',
-          header: <span className="text-xs font-medium text-gray-600 uppercase tracking-wider">Funnel Stage</span>,
-          cell: info => info.getValue() || '-',
-        },
-      ] as ColumnDef<ReportRow>[] : []),
+      {
+        accessorKey: 'intent',
+        header: 'Intent',
+        cell: info => <IntentBadge intent={info.getValue<SEOIntent | undefined>()} />,
+      },
+      {
+        accessorKey: 'category',
+        header: 'Category',
+        cell: info => <span className="text-xs text-gray-600 dark:text-gray-400">{info.getValue<string>() || 'N/A'}</span>,
+      },
+      {
+        accessorKey: 'funnel_stage',
+        header: 'Funnel Stage',
+        cell: info => <span className="text-xs text-gray-600 dark:text-gray-400">{info.getValue<string>() || 'N/A'}</span>,
+      },
     ];
   }, [reportData, intents]);
 
-  // TanStack Table instance with Pagination
+  // TanStack Table instance
   const table = useReactTable({
     data: tableData,
     columns,
@@ -292,10 +308,10 @@ export default function ReportResultsPage() {
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     initialState: {
-        pagination: {
-            pageSize: 50,
-        },
-    }
+      pagination: {
+        pageSize: 50, // Default page size
+      },
+    },
   });
 
   // Analysis & Export Handlers
@@ -516,344 +532,264 @@ export default function ReportResultsPage() {
     }
   };
 
+  // Add handleLogout
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout');
+      router.push('/');
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
+
+  // Loading State (Consistent Styling)
   if (isLoading) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gray-50">
-        <div className="flex items-center justify-center">
-          <svg className="animate-spin h-8 w-8 text-blue-500 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <span className="text-lg">Loading report data...</span>
-        </div>
+      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+        <Loader2 className="animate-spin h-12 w-12 text-blue-600 dark:text-blue-400" />
+        <span className="mt-4 text-lg text-gray-700 dark:text-gray-300">Loading report results...</span>
       </div>
     );
   }
-  
-  if (error) {
+
+  // Error state (Consistent Styling)
+  if (error || !reportData) {
+    // Check if the error is due to missing profile, otherwise show general error
+    const isAuthError = error?.includes('profile') || !userProfile;
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gray-50">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-          <div className="text-center mb-6">
-            <svg className="mx-auto h-12 w-12 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <h3 className="mt-2 text-lg font-medium text-gray-900">Error Loading Report</h3>
-            <p className="mt-1 text-sm text-gray-500">{error}</p>
-          </div>
-          <div className="mt-6">
-            <Link href="/dashboard" className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-              Return to Dashboard
-            </Link>
-          </div>
-        </div>
-      </div>
+       <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+         <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-xl p-8 border border-red-300 dark:border-red-700">
+           <div className="text-center mb-6">
+             <AlertTriangle className="mx-auto h-12 w-12 text-red-500 dark:text-red-400" />
+             <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">Error Loading Report</h3>
+             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{error || 'Could not load report data.'}</p>
+           </div>
+           <div className="mt-6">
+             <Link
+               href={isAuthError ? '/' : '/dashboard/reports'} // Go to login or reports list
+               className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 ease-in-out transform hover:scale-[1.03]"
+             >
+               {isAuthError ? 'Go to Login' : 'Back to Reports'}
+             </Link>
+           </div>
+         </div>
+       </div>
     );
   }
-  
-  if (!reportData) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gray-50">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-          <div className="text-center mb-6">
-            <svg className="mx-auto h-12 w-12 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <h3 className="mt-2 text-lg font-medium text-gray-900">No Report Data</h3>
-            <p className="mt-1 text-sm text-gray-500">No report data was found. Please generate a new report.</p>
-          </div>
-          <div className="mt-6">
-            <Link href="/dashboard" className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-              Return to Dashboard
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  
+
+  // Main component render
   return (
-    <div className="min-h-screen bg-gray-50 pb-12">
-      <nav className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <Link href="/dashboard" className="text-xl font-bold text-gray-900">
-                  GSC Report Builder
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </nav>
-      
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="mb-4 flex items-center">
-            <Link
-              href={`/dashboard/site?url=${encodeURIComponent(reportData.request.siteUrl)}`}
-              className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
-            >
-              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Back to Report Builder
-            </Link>
-          </div>
-          
-          <div className="bg-white shadow rounded-lg p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h1 className="text-2xl font-bold text-gray-900">
-                GSC Search Analytics Report
-              </h1>
-              
-              <div className="flex space-x-3">
-                <button
-                  onClick={handleAnalyzeIntents}
-                  disabled={isAnalyzingIntents || isLoadingIntents || !reportData}
-                  className={`
-                    px-4 py-2 rounded-md text-white transition
-                    ${
-                      (isAnalyzingIntents || isLoadingIntents) ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'
-                    }
-                  `}
-                >
-                  {isAnalyzingIntents ? 'Analyzing...' : isLoadingIntents ? 'Loading Intents...' : (intents.length > 0 ? 'Reanalyze Intents' : 'Analyze Intents')}
-                </button>
-                
-                <button
-                  onClick={handleExportCSV}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-                >
-                  Export CSV
-                </button>
-                
-                {intents.length > 0 && (
-                  <button
-                    onClick={handleExportCSVWithIntents}
-                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition"
-                  >
-                    Export CSV with Intents
-                  </button>
-                )}
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:bg-gradient-to-br dark:from-gray-900 dark:to-gray-800">
+      {userProfile && (
+        <DashboardHeader
+          userName={userProfile.name}
+          userEmail={userProfile.email}
+          avatarUrl={userProfile.avatar}
+          onLogout={handleLogout}
+        />
+      )}
 
+      <AnimatedPageWrapper className="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
+        {/* Back Link */}
+        <motion.div
+           initial={{ opacity: 0, y: -10 }}
+           animate={{ opacity: 1, y: 0 }}
+           transition={{ delay: 0.1 }}
+           className="mb-6"
+         >
+          <Link
+            href="/dashboard/reports" // Link back to the reports list
+            className="inline-flex items-center text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors duration-200 ease-in-out group"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2 transition-transform duration-200 ease-in-out group-hover:-translate-x-1" />
+            Back to Reports
+          </Link>
+        </motion.div>
+
+        {/* Main Content Container */}
+        <motion.div
+           initial={{ opacity: 0, y: 20 }}
+           animate={{ opacity: 1, y: 0 }}
+           transition={{ delay: 0.2 }}
+           className="bg-white dark:bg-slate-800 shadow-xl rounded-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700"
+        >
+          {/* Report Title and Info */}
+          <div className="mb-6 border-b border-gray-200 dark:border-gray-700 pb-5">
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-200">
+              Report Results
+            </h1>
+            {reportData.request && (
+               <p className="text-gray-500 dark:text-gray-400 mt-1">
+                 For site: <span className="font-medium text-gray-700 dark:text-gray-300">{reportData.request.siteUrl}</span> | Date Range: <span className="font-medium text-gray-700 dark:text-gray-300">{reportData.request.timeRange.startDate} to {reportData.request.timeRange.endDate}</span>
+               </p>
+            )}
+          </div>
+
+          {/* Action Buttons & Notices */}
+          <div className="mb-6 space-y-4 md:space-y-0 md:flex md:items-center md:justify-between">
+             <div className="flex flex-wrap gap-2">
+                {/* Analyze Intents Button */}
                 <button
-                  onClick={handleExportToSheets}
-                  disabled={isExportingSheet || !reportData}
-                  className={`px-4 py-2 rounded-md text-white transition flex items-center space-x-2
-                    ${isExportingSheet ? 'bg-gray-400 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700'}
-                  `}
+                   onClick={handleAnalyzeIntents}
+                   disabled={isAnalyzingIntents || isLoadingIntents || intents.length > 0} // Disable if already analyzed or loading
+                   className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white transition-colors duration-200 ease-in-out transform hover:scale-[1.03] disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100
+                    ${isAnalyzingIntents || isLoadingIntents ? 'bg-gray-400 dark:bg-gray-600' : intents.length > 0 ? 'bg-green-600' : 'bg-purple-600 hover:bg-purple-700'}`}
                 >
-                  {isExportingSheet ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                      <span>Exporting...</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6C4.9 2 4 .9 4 4v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/><path d="M15.5 13.5h-1v-1h-1v1h-1v1h1v1h1v-1h1v-1zM11 19h2v-1.5h1V16h-1v-1.5h-2v1.5h-1V16h1v1.5h-1V19z"/></svg>
-                      <span>Export to Sheets</span>
-                    </>
-                  )}
+                   <BrainCircuit className={`mr-2 h-5 w-5 ${isAnalyzingIntents || isLoadingIntents ? 'animate-pulse' : ''}`} />
+                   {isAnalyzingIntents ? 'Analyzing...' : isLoadingIntents ? 'Loading Intents...': intents.length > 0 ? 'Intents Analyzed' : 'Analyze Query Intents'}
                 </button>
-              </div>
-            </div>
-            
-            <div className="mb-4 space-y-2">
-              {exportSheetError && (
-                <div className="p-3 border border-red-300 bg-red-50 rounded-md text-red-800 text-sm">
-                  <p><strong>Sheets Export Failed:</strong> {exportSheetError}</p>
-                </div>
-              )}
-              {exportSheetSuccessUrl && (
-                <div className="p-3 border border-green-300 bg-green-50 rounded-md text-green-800 text-sm flex justify-between items-center">
-                  <p>Successfully exported!</p>
-                  <a 
-                    href={exportSheetSuccessUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ml-4 px-3 py-1 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition"
-                  >
-                    Open Google Sheet
-                  </a>
-                </div>
-              )}
-              {intentsError && (
-                 <div className="p-3 border border-red-300 bg-red-50 rounded-md text-red-800 text-sm">
-                   <p>{intentsError}</p>
-                   {rateLimitInfo && (
-                     <div className="mt-1 text-xs">
-                       <p>Processed {rateLimitInfo.processed} of {rateLimitInfo.processed + rateLimitInfo.remaining} queries.</p>
-                       <p className="mt-1">{rateLimitInfo.suggestion}</p>
-                     </div>
-                   )}
+
+                {/* Export Buttons */} 
+                <button
+                   onClick={intents.length > 0 ? handleExportCSVWithIntents : handleExportCSV}
+                   className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 ease-in-out transform hover:scale-[1.03]"
+                 >
+                   <Download className="mr-2 h-5 w-5" /> Export CSV
+                 </button>
+                 <button
+                     onClick={handleExportToSheets}
+                     disabled={isExportingSheet}
+                     className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 ease-in-out transform hover:scale-[1.03] disabled:opacity-50 disabled:cursor-not-allowed"
+                   >
+                     <Sheet className={`mr-2 h-5 w-5 ${isExportingSheet ? 'animate-pulse' : ''}`} />
+                     {isExportingSheet ? 'Exporting...' : 'Export to Google Sheets'}
+                   </button>
+             </div>
+             {/* Rate Limit Info */}
+             {rateLimitInfo && (
+                 <div className="text-xs text-yellow-600 dark:text-yellow-400 mt-2 md:mt-0">
+                    Gemini API Limit: {rateLimitInfo.remaining} / {rateLimitInfo.limit} requests remaining this minute.
                  </div>
-               )}
-            </div>
-            
-            <div className="mb-6 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <h3 className="text-sm font-medium text-gray-500">Site</h3>
-                <p className="text-lg font-semibold text-gray-900">{reportData.request.siteUrl}</p>
-              </div>
-              
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <h3 className="text-sm font-medium text-gray-500">Date Range</h3>
-                <p className="text-lg font-semibold text-gray-900">
-                  {reportData.request.timeRange.startDate} to {reportData.request.timeRange.endDate}
-                </p>
-              </div>
-              
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <h3 className="text-sm font-medium text-gray-500">Metrics</h3>
-                <p className="text-lg font-semibold text-gray-900">
-                  {reportData.request.metrics.join(', ')}
-                </p>
-              </div>
-              
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <h3 className="text-sm font-medium text-gray-500">Total Clicks</h3>
-                <p className="text-lg font-semibold text-gray-900">{summaryTotals.totalClicks.toLocaleString()}</p>
-              </div>
-              
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <h3 className="text-sm font-medium text-gray-500">Total Impressions</h3>
-                <p className="text-lg font-semibold text-gray-900">{summaryTotals.totalImpressions.toLocaleString()}</p>
-              </div>
-            </div>
-            
-            {intents.length > 0 && (
-              <div className="mb-4">
-                <label htmlFor="intentFilter" className="block text-sm font-medium text-gray-700 mr-2">Filter by Intent:</label>
-                <select
-                  id="intentFilter"
-                  value={(table.getColumn('intent')?.getFilterValue() as string) ?? ''}
-                  onChange={e => table.getColumn('intent')?.setFilterValue(e.target.value || undefined)}
-                  className="mt-1 block w-full md:w-1/4 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-                >
-                  <option value="">All Intents</option>
-                  {['Informational', 'Navigational', 'Transactional', 'Commercial Investigation', 'Mixed', 'Unknown'].map(intent => (
-                    <option key={intent} value={intent}>{intent}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            
-            <div className="mt-4 overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  {table.getHeaderGroups().map(headerGroup => (
-                    <tr key={headerGroup.id}>
-                      {headerGroup.headers.map(header => (
-                        <th key={header.id} scope="col" className="px-6 py-3 text-left">
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext()
-                              )}
-                        </th>
-                      ))}
-                    </tr>
-                  ))}
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {table.getRowModel().rows.length > 0 ? (
-                    table.getRowModel().rows.map(row => (
-                      <tr key={row.id} className={row.index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        {row.getVisibleCells().map(cell => (
-                          <td key={cell.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </td>
-                        ))}
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={columns.length} className="text-center py-4 text-sm text-gray-700">
-                        {isLoadingIntents ? 'Loading intent data...' : reportData.data.length === 0 ? 'No report data found.' : 'No results match your filters.'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            
-            {/* --- Pagination Controls --- */}
-            {tableData.length > 0 && (
-                <div className="flex items-center justify-between mt-4 text-gray-700">
-                    {/* Page Size Selector */}
-                    <div className="flex items-center space-x-2 text-sm">
-                        <span>Rows per page:</span>
-                        <select
-                            value={table.getState().pagination.pageSize}
-                            onChange={e => {
-                                table.setPageSize(Number(e.target.value))
-                            }}
-                            className="border border-gray-300 rounded px-2 py-1 text-gray-700"
-                        >
-                            {[10, 25, 50, 100, 250].map(pageSize => (
-                                <option key={pageSize} value={pageSize}>
-                                    {pageSize}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Page Navigation */}
-                    <div className="flex items-center space-x-2 text-sm">
-                        <span>
-                            Page{' '}
-                            <strong>
-                                {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
-                            </strong>
-                        </span>
-                        <span className="hidden sm:inline">|</span>
-                        <span className="hidden sm:inline">Go to page:</span>
-                        <input
-                            type="number"
-                            defaultValue={table.getState().pagination.pageIndex + 1}
-                            onChange={e => {
-                                const page = e.target.value ? Number(e.target.value) - 1 : 0
-                                table.setPageIndex(page)
-                            }}
-                            className="border border-gray-300 rounded px-2 py-1 w-16 hidden sm:inline-block text-gray-700"
-                        />
-                        <button
-                            className="px-2 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 hover:bg-gray-50"
-                            onClick={() => table.setPageIndex(0)}
-                            disabled={!table.getCanPreviousPage()}
-                        >
-                            {'<<'}
-                        </button>
-                        <button
-                            className="px-2 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 hover:bg-gray-50"
-                            onClick={() => table.previousPage()}
-                            disabled={!table.getCanPreviousPage()}
-                        >
-                            {'<'}
-                        </button>
-                        <button
-                            className="px-2 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 hover:bg-gray-50"
-                            onClick={() => table.nextPage()}
-                            disabled={!table.getCanNextPage()}
-                        >
-                            {'>'}
-                        </button>
-                        <button
-                            className="px-2 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 hover:bg-gray-50"
-                            onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-                            disabled={!table.getCanNextPage()}
-                        >
-                            {'>>'}
-                        </button>
-                    </div>
-                </div>
-            )}
+             )}
           </div>
-        </div>
-      </main>
+
+          {/* Intent Analysis Error/Notice */}
+          {intentsError && (
+              <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/50 border border-red-300 dark:border-red-700 rounded-md text-red-700 dark:text-red-300 text-sm flex items-center">
+                 <AlertTriangle className="w-5 h-5 mr-2 flex-shrink-0" />
+                 <span>{intentsError}</span>
+              </div>
+          )}
+           {/* Google Sheets Export Status */}
+           {exportSheetError && (
+              <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/50 border border-red-300 dark:border-red-700 rounded-md text-red-700 dark:text-red-300 text-sm flex items-center">
+                 <XCircle className="w-5 h-5 mr-2 flex-shrink-0" />
+                 <span>Sheets Export Failed: {exportSheetError}</span>
+              </div>
+           )}
+           {exportSheetSuccessUrl && (
+             <div className="mb-4 p-3 bg-green-100 dark:bg-green-900/50 border border-green-300 dark:border-green-700 rounded-md text-green-700 dark:text-green-300 text-sm flex items-center">
+                <CheckCircle className="w-5 h-5 mr-2 flex-shrink-0" />
+                <span>Successfully exported to Google Sheets!</span>
+                <a href={exportSheetSuccessUrl} target="_blank" rel="noopener noreferrer" className="ml-2 font-medium underline hover:text-green-600 dark:hover:text-green-200">
+                    Open Sheet
+                </a>
+             </div>
+           )}
+
+          {/* TanStack Table */}
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-slate-700">
+                {table.getHeaderGroups().map(headerGroup => (
+                  <tr key={headerGroup.id}>
+                    {headerGroup.headers.map(header => (
+                      <th
+                        key={header.id}
+                        scope="col"
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                      >
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                      </th>
+                    ))}
+                  </tr>
+                ))}
+              </thead>
+              <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-gray-700">
+                {table.getRowModel().rows.map(row => (
+                  <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors duration-150">
+                    {row.getVisibleCells().map(cell => (
+                      <td key={cell.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                 {table.getRowModel().rows.length === 0 && (
+                    <tr>
+                       <td colSpan={columns.length} className="text-center py-10 text-gray-500 dark:text-gray-400">
+                          No data available for this report.
+                       </td>
+                    </tr>
+                 )}
+              </tbody>
+            </table>
+          </div>
+
+           {/* Pagination Controls */}
+           <div className="py-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-700 mt-4">
+              <div className="flex-1 flex justify-between sm:hidden">
+                 <button
+                    onClick={() => table.previousPage()}
+                    disabled={!table.getCanPreviousPage()}
+                    className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-50"
+                 >
+                    Previous
+                 </button>
+                 <button
+                    onClick={() => table.nextPage()}
+                    disabled={!table.getCanNextPage()}
+                    className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-50"
+                 >
+                    Next
+                 </button>
+              </div>
+              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                 <div>
+                    <p className="text-sm text-gray-700 dark:text-gray-400">
+                       Showing <span className="font-medium">{table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}</span>
+                       {' '}to{' '}
+                       <span className="font-medium">{Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, table.getFilteredRowModel().rows.length)}</span>
+                       {' '}of{' '}
+                       <span className="font-medium">{table.getFilteredRowModel().rows.length}</span> results
+                    </p>
+                 </div>
+                 <div>
+                    <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                       <button
+                          onClick={() => table.previousPage()}
+                          disabled={!table.getCanPreviousPage()}
+                          className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-50"
+                       >
+                          <span className="sr-only">Previous</span>
+                          {/* Heroicon name: solid/chevron-left */}
+                          <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                             <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                       </button>
+                       {/* Current page indicator could be added here if needed */}
+                       <button
+                          onClick={() => table.nextPage()}
+                          disabled={!table.getCanNextPage()}
+                          className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-50"
+                       >
+                          <span className="sr-only">Next</span>
+                          {/* Heroicon name: solid/chevron-right */}
+                          <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                             <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                          </svg>
+                       </button>
+                    </nav>
+                 </div>
+              </div>
+           </div>
+        </motion.div>
+      </AnimatedPageWrapper>
     </div>
   );
 } 

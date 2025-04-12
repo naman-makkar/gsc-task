@@ -29,11 +29,11 @@ export const DraggableMetric: React.FC<DraggableMetricProps> = ({
     opacity: isDragging ? 0.5 : 1,
   };
 
-  // Generate CSS classes based on state
+  // Generate CSS classes based on state, adding dark variants
   const baseClasses = "flex items-center p-3 mb-2 rounded-lg border transition-all";
-  const selectedClasses = isSelected 
-    ? "bg-blue-50 border-blue-300 shadow" 
-    : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm cursor-grab";
+  const selectedClasses = isSelected
+    ? "bg-blue-50 border-blue-300 shadow dark:bg-blue-900/50 dark:border-blue-700"
+    : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm cursor-grab dark:bg-slate-700 dark:border-gray-600 dark:hover:border-gray-500 dark:hover:bg-slate-600";
 
   return (
     <div
@@ -44,7 +44,7 @@ export const DraggableMetric: React.FC<DraggableMetricProps> = ({
       className={`${baseClasses} ${selectedClasses}`}
     >
       {/* Icon placeholder - would use actual icons in production */}
-      <div className="flex-shrink-0 mr-3 h-5 w-5 text-gray-500">
+      <div className="flex-shrink-0 mr-3 h-5 w-5 text-gray-500 dark:text-gray-400">
         {metric.type === 'clicks' && (
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M6.672 1.911a1 1 0 10-1.932.518l.259.966a1 1 0 001.932-.518l-.26-.966zM2.429 4.74a1 1 0 10-.517 1.932l.966.259a1 1 0 00.517-1.932l-.966-.26zm8.814-.569a1 1 0 00-1.415-1.414l-.707.707a1 1 0 101.415 1.415l.707-.708zm-7.071 7.072l.707-.707A1 1 0 003.465 9.12l-.708.707a1 1 0 001.415 1.415zm3.2-5.171a1 1 0 00-1.3 1.3l4 10a1 1 0 001.823.075l1.38-2.759 3.018 3.02a1 1 0 001.414-1.415l-3.019-3.02 2.76-1.379a1 1 0 00-.076-1.822l-10-4z" clipRule="evenodd" />
@@ -69,8 +69,8 @@ export const DraggableMetric: React.FC<DraggableMetricProps> = ({
       </div>
       
       <div className="flex-grow">
-        <h3 className="text-sm font-medium text-gray-900">{metric.name}</h3>
-        <p className="text-xs text-gray-500">{metric.description}</p>
+        <h3 className="text-sm font-medium text-gray-900 dark:text-gray-200">{metric.name}</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400">{metric.description}</p>
       </div>
       
       {isSelected && onRemove && (
@@ -79,7 +79,7 @@ export const DraggableMetric: React.FC<DraggableMetricProps> = ({
             e.stopPropagation();
             onRemove();
           }}
-          className="ml-2 text-gray-400 hover:text-gray-600 focus:outline-none"
+          className="ml-2 text-gray-400 hover:text-gray-600 focus:outline-none dark:hover:text-gray-200"
           aria-label={`Remove ${metric.name}`}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">

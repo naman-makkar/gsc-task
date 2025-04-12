@@ -2,7 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { motion } from 'framer-motion';
+import { Loader2, AlertTriangle } from 'lucide-react';
+
+import AnimatedPageWrapper from '@/components/ui/AnimatedPageWrapper'; // Assuming alias setup
+import DashboardHeader from '@/components/ui/DashboardHeader';     // Assuming alias setup
+import PreviousSiteCard from '@/components/ui/PreviousSiteCard';   // Assuming alias setup
+import PropertyCard from '@/components/ui/PropertyCard';       // Assuming alias setup
 
 type Site = {
   siteUrl: string;
@@ -12,6 +18,7 @@ type Site = {
 type UserProfile = {
   name: string;
   email: string;
+  avatar?: string; // Changed to correct field name 'avatar'
 };
 
 export default function Dashboard() {
@@ -22,234 +29,242 @@ export default function Dashboard() {
   const [selectedSite, setSelectedSite] = useState<string | null>(null);
   const router = useRouter();
 
-  // Fetch user profile and sites data on component mount
   useEffect(() => {
+    let shouldRedirect = false; // Variable to track redirection
+    let fetchedSitesData: Site[] | null = null; // Variable to hold sites data for finally block
+    let previouslySelectedSiteUrl: string | null = null; // Variable to hold selection status for finally block
+
     const fetchUserData = async () => {
+      setIsLoading(true);
+      setError(null);
+      shouldRedirect = false; // Reset on each fetch attempt
+      fetchedSitesData = null;
+      previouslySelectedSiteUrl = null;
+
       try {
-        // Fetch user profile
-        const profileResponse = await fetch('/api/user/profile');
-        
+        const [profileResponse, sitesResponse, selectedSiteResponse] = await Promise.all([
+          fetch('/api/user/profile'),
+          fetch('/api/gsc/sites'),
+          fetch('/api/gsc/selected-site')
+        ]);
+
         if (!profileResponse.ok) {
           if (profileResponse.status === 401) {
-            // If unauthorized, redirect to login
             router.push('/');
             return;
           }
           throw new Error('Failed to fetch user profile');
         }
-        
         const profileData = await profileResponse.json();
         setUserProfile(profileData);
 
-        // Fetch user's GSC sites
-        const sitesResponse = await fetch('/api/gsc/sites');
-        
-        if (!sitesResponse.ok) {
-          throw new Error('Failed to fetch sites');
-        }
-        
+        if (!sitesResponse.ok) throw new Error('Failed to fetch sites');
         const sitesData = await sitesResponse.json();
-        setSites(sitesData);
-        
-        // Check if user has a previously selected site
-        const selectedSiteResponse = await fetch('/api/gsc/selected-site');
-        
+        fetchedSitesData = sitesData || []; // Store for finally block
+        setSites(fetchedSitesData || []); // Ensure we pass an array, defaulting to []
+
         if (selectedSiteResponse.ok) {
           const selectedSiteData = await selectedSiteResponse.json();
           if (selectedSiteData.selectedSite) {
-            setSelectedSite(selectedSiteData.selectedSite);
+            previouslySelectedSiteUrl = selectedSiteData.selectedSite; // Store for finally block
+            setSelectedSite(previouslySelectedSiteUrl);
           }
         }
+
+        // Check for redirection condition
+        if ((fetchedSitesData?.length === 1) && !previouslySelectedSiteUrl) {
+          shouldRedirect = true; // Set flag for finally block
+          const siteUrl = fetchedSitesData[0].siteUrl;
+          // Store this as the selected site before redirecting
+          await fetch('/api/gsc/selected-site', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ siteUrl }),
+          });
+          router.push(`/dashboard/site?url=${encodeURIComponent(siteUrl)}`);
+          // Don't set isLoading to false yet, let the redirect happen
+          return; // Exit fetch function early
+        }
+
       } catch (err: any) {
-        setError(err.message);
+        console.error("Dashboard fetch error:", err);
+        setError(err.message || 'An unexpected error occurred.');
       } finally {
-        setIsLoading(false);
+        // Set loading to false ONLY if we are NOT redirecting
+        if (!shouldRedirect) {
+             setIsLoading(false);
+        }
+        // Clean up local variables if needed (optional)
+        fetchedSitesData = null;
+        previouslySelectedSiteUrl = null;
       }
     };
 
     fetchUserData();
+
+    // Cleanup function (optional, depends on fetch library/needs)
+    // return () => { /* Abort fetch or cleanup */ };
+
   }, [router]);
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout');
-    router.push('/');
-  };
-  
-  const handleSiteSelection = (siteUrl: string) => {
-    router.push(`/dashboard/site?url=${encodeURIComponent(siteUrl)}`);
+    try {
+      await fetch('/api/auth/logout');
+      router.push('/');
+    } catch (error) {
+      console.error("Logout failed:", error);
+      // Handle logout error display if necessary
+    }
   };
 
+  const handleSiteSelection = async (siteUrl: string) => {
+    try {
+      // Optimistically update UI or show loading state
+      setSelectedSite(siteUrl);
+      // Store the selected site
+      await fetch('/api/gsc/selected-site', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ siteUrl }),
+      });
+      router.push(`/dashboard/site?url=${encodeURIComponent(siteUrl)}`);
+    } catch (error) {
+      console.error("Failed to select site:", error);
+      setError("Could not save your site selection. Please try again.");
+      setSelectedSite(null); // Revert optimistic update
+    }
+  };
+
+  // Framer Motion Variants for Staggered Grid
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1, // Stagger delay between cards
+      },
+    },
+  };
+
+  const cardVariants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 100 } },
+  };
+
+  // Loading State
   if (isLoading) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gray-50">
-        <div className="flex items-center justify-center">
-          <svg className="animate-spin h-8 w-8 text-blue-500 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <span className="text-lg">Loading your dashboard...</span>
-        </div>
+      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+        <Loader2 className="animate-spin h-12 w-12 text-blue-600 dark:text-blue-400" />
+        <span className="mt-4 text-lg text-gray-700 dark:text-gray-300">Loading your dashboard...</span>
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gray-50">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-          <div className="text-center mb-6">
-            <svg className="mx-auto h-12 w-12 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <h3 className="mt-2 text-lg font-medium text-gray-900">Error Loading Dashboard</h3>
-            <p className="mt-1 text-sm text-gray-500">{error}</p>
-          </div>
-          <div className="mt-6">
-            <button
-              onClick={() => router.push('/')}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Return to Home
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Find the data for the previously selected site
+  const previousSiteData = sites.find(site => site.siteUrl === selectedSite);
 
-  // Redirect to the selected site dashboard if there's only one site
-  if (sites.length === 1 && !selectedSite) {
-    const siteUrl = sites[0].siteUrl;
-    router.push(`/dashboard/site?url=${encodeURIComponent(siteUrl)}`);
-    return null;
+  // Log user profile data just before rendering
+  if (userProfile) {
+    console.log('Dashboard Page - UserProfile Data:', userProfile);
+    console.log('Dashboard Page - avatar:', userProfile.avatar); // Log the correct field
   }
-
-  // If there's a previously selected site, show a quick access card
-  const hasSelectedSite = selectedSite && sites.some(site => site.siteUrl === selectedSite);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <h1 className="text-xl font-bold text-gray-900">GSC Report Builder</h1>
-              </div>
-              <div className="ml-6 flex space-x-4">
-                <Link
-                  href="/dashboard"
-                  className={`px-3 py-2 rounded-md text-sm font-medium ${
-                    true ? 'text-white bg-blue-600' : 'text-gray-300 hover:text-white hover:bg-blue-700'
-                  }`}
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  href="/dashboard/reports"
-                  className="px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:text-white hover:bg-blue-700"
-                >
-                  Reports
-                </Link>
-              </div>
-            </div>
-            <div className="flex items-center">
-              {userProfile && (
-                <div className="flex items-center">
-                  <span className="text-gray-700 mr-4">{userProfile.name || userProfile.email}</span>
-                  <button
-                    onClick={handleLogout}
-                    className="ml-4 px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                  >
-                    Logout
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </nav>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:bg-gradient-to-br dark:from-gray-900 dark:to-gray-800">
+      {userProfile && (
+        <DashboardHeader
+          userName={userProfile.name}
+          userEmail={userProfile.email}
+          avatarUrl={userProfile.avatar} // Pass the correct field 'avatar'
+          onLogout={handleLogout}
+        />
+      )}
 
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          {hasSelectedSite && (
-            <div className="mb-8 bg-white shadow rounded-lg p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Continue with your previous site</h2>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600">{selectedSite}</p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {sites.find(site => site.siteUrl === selectedSite)?.permissionLevel || 'Access level unknown'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleSiteSelection(selectedSite)}
-                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Continue
-                </button>
-              </div>
-            </div>
+      <AnimatedPageWrapper className="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
+        {/* Welcome Section - Animated */}
+        <motion.div
+          initial={{ opacity: 0, x: -30 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="mb-10"
+        >
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white mb-2">
+            Welcome, {userProfile?.name || 'User'} 👋
+          </h1>
+          <p className="text-lg text-gray-600 dark:text-gray-400">
+            Select one of your Google Search Console websites below to get started.
+          </p>
+        </motion.div>
+
+        {/* Display Error if any */}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative dark:bg-red-900 dark:border-red-700 dark:text-red-300"
+            role="alert"
+          >
+             <strong className="font-bold mr-2"><AlertTriangle className="inline w-5 h-5 mr-1"/>Error:</strong>
+             <span className="block sm:inline">{error}</span>
+          </motion.div>
+        )}
+
+        {/* Previous Site Card - Animated */}
+        {previousSiteData && (
+          <PreviousSiteCard
+            siteUrl={previousSiteData.siteUrl}
+            permissionLevel={previousSiteData.permissionLevel}
+            onContinue={handleSiteSelection}
+          />
+        )}
+
+        {/* Property Selection Grid - Animated */}
+        <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">
+            Your Search Console Properties
+          </h2>
+
+          {sites.length === 0 && !isLoading && !error ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-10"
+             >
+              <p className="text-gray-500 dark:text-gray-400">No Search Console properties found.</p>
+              <p className="text-gray-500 dark:text-gray-400 mt-2">
+                Ensure you have access in Google Search Console.
+              </p>
+              <a
+                href="https://search.google.com/search-console"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-6 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 ease-in-out transform hover:scale-[1.03]"
+              >
+                Go to Google Search Console
+              </a>
+            </motion.div>
+          ) : (
+            <motion.div
+              className="grid gap-6 md:grid-cols-2 lg:grid-cols-3"
+              variants={containerVariants}
+              initial="hidden"
+              animate="show"
+            >
+              {sites.map((site, index) => (
+                <PropertyCard
+                  key={site.siteUrl}
+                  siteUrl={site.siteUrl}
+                  permissionLevel={site.permissionLevel}
+                  onSelect={handleSiteSelection}
+                  animationVariants={cardVariants}
+                  custom={index} // Pass index for stagger effect
+                />
+              ))}
+            </motion.div>
           )}
-
-          <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">Your Search Console Properties</h2>
-            
-            {sites.length === 0 ? (
-              <div className="text-center py-6">
-                <p className="text-gray-500">No Search Console properties found for your account.</p>
-                <p className="text-gray-500 mt-2">
-                  Please make sure you have access to properties in Google Search Console.
-                </p>
-                <div className="mt-6">
-                  <a 
-                    href="https://search.google.com/search-console" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                  >
-                    Go to Google Search Console
-                  </a>
-                </div>
-              </div>
-            ) : (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {sites.map((site) => (
-                  <div 
-                    key={site.siteUrl} 
-                    className="relative border border-gray-200 rounded-lg hover:shadow-md transition-shadow cursor-pointer"
-                    onClick={() => handleSiteSelection(site.siteUrl)}
-                  >
-                    <div className="p-5">
-                      <div className="truncate font-medium text-gray-900 mb-1">
-                        {site.siteUrl}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {site.permissionLevel}
-                      </div>
-                      <div className="mt-4 flex justify-end">
-                        <button className="text-sm text-blue-600 hover:text-blue-800 flex items-center">
-                          Select
-                          <svg className="w-4 h-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                    {selectedSite === site.siteUrl && (
-                      <div className="absolute top-2 right-2">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Active
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
-      </div>
+      </AnimatedPageWrapper>
     </div>
   );
 } 

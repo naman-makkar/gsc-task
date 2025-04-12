@@ -32,17 +32,17 @@ export const SortableMetric: React.FC<SortableMetricProps> = ({ metric, onRemove
       style={style}
       {...attributes}
       {...listeners}
-      className="flex items-center p-3 mb-2 rounded-lg border border-blue-300 bg-blue-50 shadow cursor-grab"
+      className="flex items-center p-3 mb-2 rounded-lg border border-blue-300 bg-blue-50 dark:bg-blue-900/50 dark:border-blue-700 shadow cursor-grab"
     >
       {/* Drag handle */}
-      <div className="flex-shrink-0 mr-2 text-gray-400">
+      <div className="flex-shrink-0 mr-2 text-gray-400 dark:text-gray-500">
         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
         </svg>
       </div>
 
       {/* Icon for the metric */}
-      <div className="flex-shrink-0 mr-3 h-5 w-5 text-blue-500">
+      <div className="flex-shrink-0 mr-3 h-5 w-5 text-blue-500 dark:text-blue-400">
         {metric.type === 'clicks' && (
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M6.672 1.911a1 1 0 10-1.932.518l.259.966a1 1 0 001.932-.518l-.26-.966zM2.429 4.74a1 1 0 10-.517 1.932l.966.259a1 1 0 00.517-1.932l-.966-.26zm8.814-.569a1 1 0 00-1.415-1.414l-.707.707a1 1 0 101.415 1.415l.707-.708zm-7.071 7.072l.707-.707A1 1 0 003.465 9.12l-.708.707a1 1 0 001.415 1.415zm3.2-5.171a1 1 0 00-1.3 1.3l4 10a1 1 0 001.823.075l1.38-2.759 3.018 3.02a1 1 0 001.414-1.415l-3.019-3.02 2.76-1.379a1 1 0 00-.076-1.822l-10-4z" clipRule="evenodd" />
@@ -67,8 +67,8 @@ export const SortableMetric: React.FC<SortableMetricProps> = ({ metric, onRemove
       </div>
       
       <div className="flex-grow">
-        <h3 className="text-sm font-medium text-gray-900">{metric.name}</h3>
-        <p className="text-xs text-gray-500">{metric.description}</p>
+        <h3 className="text-sm font-medium text-gray-900 dark:text-gray-200">{metric.name}</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400">{metric.description}</p>
       </div>
       
       <button 
@@ -76,7 +76,7 @@ export const SortableMetric: React.FC<SortableMetricProps> = ({ metric, onRemove
           e.stopPropagation();
           onRemove();
         }}
-        className="ml-2 text-gray-400 hover:text-gray-600 focus:outline-none"
+        className="ml-2 text-gray-400 hover:text-gray-600 focus:outline-none dark:text-gray-500 dark:hover:text-gray-300"
         aria-label={`Remove ${metric.name}`}
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">

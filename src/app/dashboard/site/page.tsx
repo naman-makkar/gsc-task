@@ -3,35 +3,42 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
+import { Loader2, AlertTriangle, ArrowLeft } from 'lucide-react';
+
 import { ReportBuilderProvider } from '@/context/ReportBuilderContext';
 import { ReportBuilder } from '@/components/ReportBuilder/ReportBuilder';
+import AnimatedPageWrapper from '@/components/ui/AnimatedPageWrapper';
+import DashboardHeader from '@/components/ui/DashboardHeader';
 
 type UserProfile = {
   name: string;
   email: string;
+  avatar?: string;
 };
 
 export default function SiteDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const siteUrl = searchParams.get('url');
-  
+
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Redirect if no site URL provided
     if (!siteUrl) {
+      console.warn("No site URL found, redirecting to dashboard.");
       router.push('/dashboard');
       return;
     }
-    
+
     const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
       try {
-        // Fetch user profile
+        // Fetch user profile (required for header)
         const profileResponse = await fetch('/api/user/profile');
-        
         if (!profileResponse.ok) {
           if (profileResponse.status === 401) {
             router.push('/');
@@ -39,25 +46,15 @@ export default function SiteDashboard() {
           }
           throw new Error('Failed to fetch user profile');
         }
-        
         const profileData = await profileResponse.json();
         setUserProfile(profileData);
-        
-        // Save selected site to user settings
-        const saveResponse = await fetch('/api/gsc/selected-site', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ siteUrl }),
-        });
-        
-        if (!saveResponse.ok) {
-          console.warn('Failed to save selected site');
-          // Continue anyway as this is not critical
-        }
+
+        // No need to explicitly save selected site here if API call is robust
+        // The primary action is displaying the builder for the given siteUrl
+
       } catch (err: any) {
-        setError(err.message);
+        console.error("Site Dashboard fetch error:", err);
+        setError(err.message || 'An unexpected error occurred loading site data.');
       } finally {
         setIsLoading(false);
       }
@@ -67,101 +64,118 @@ export default function SiteDashboard() {
   }, [router, siteUrl]);
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout');
-    router.push('/');
+    try {
+      await fetch('/api/auth/logout');
+      router.push('/');
+    } catch (error) {
+      console.error("Logout failed:", error);
+      // Handle error display
+    }
   };
 
+  // Loading State
   if (isLoading) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gray-50">
-        <div className="flex items-center justify-center">
-          <svg className="animate-spin h-8 w-8 text-blue-500 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <span className="text-lg">Loading site data...</span>
-        </div>
+      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+        <Loader2 className="animate-spin h-12 w-12 text-blue-600 dark:text-blue-400" />
+        <span className="mt-4 text-lg text-gray-700 dark:text-gray-300">Loading site dashboard...</span>
       </div>
     );
   }
 
-  if (error) {
+  // Error State (only if essential data like user profile failed)
+  if (error && !userProfile) { // Show fatal error if profile load failed
+     return (
+      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+         <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-xl p-8 border border-red-300 dark:border-red-700">
+           <div className="text-center mb-6">
+             <AlertTriangle className="mx-auto h-12 w-12 text-red-500 dark:text-red-400" />
+             <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">Error Loading Site Data</h3>
+             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{error}</p>
+           </div>
+           <div className="mt-6">
+             <button
+               onClick={() => router.push('/dashboard')}
+               className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 ease-in-out transform hover:scale-[1.03]"
+             >
+               Return to Dashboard
+             </button>
+           </div>
+         </div>
+       </div>
+     );
+  }
+
+  if (!siteUrl) {
+    // This case should ideally be handled by the redirect in useEffect,
+    // but adding a fallback message just in case.
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gray-50">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-          <div className="text-center mb-6">
-            <svg className="mx-auto h-12 w-12 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <h3 className="mt-2 text-lg font-medium text-gray-900">Error Loading Site Data</h3>
-            <p className="mt-1 text-sm text-gray-500">{error}</p>
-          </div>
-          <div className="mt-6">
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Return to Dashboard
-            </button>
-          </div>
-        </div>
-      </div>
+       <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+          <p className="text-red-500">Site URL is missing.</p>
+          <Link href="/dashboard" className="mt-4 text-blue-600 hover:underline">Go back to Dashboard</Link>
+       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <Link href="/dashboard" className="text-xl font-bold text-gray-900">
-                  GSC Report Builder
-                </Link>
-              </div>
-            </div>
-            <div className="flex items-center">
-              {userProfile && (
-                <div className="flex items-center">
-                  <span className="text-gray-700 mr-4">{userProfile.name || userProfile.email}</span>
-                  <button
-                    onClick={handleLogout}
-                    className="ml-4 px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                  >
-                    Logout
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </nav>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:bg-gradient-to-br dark:from-gray-900 dark:to-gray-800">
+      {userProfile && (
+        <DashboardHeader
+          userName={userProfile.name}
+          userEmail={userProfile.email}
+          avatarUrl={userProfile.avatar}
+          onLogout={handleLogout}
+        />
+      )}
 
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="mb-4 flex items-center">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
-            >
-              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Back to Properties
-            </Link>
-          </div>
+      <AnimatedPageWrapper className="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
+        <motion.div
+           initial={{ opacity: 0, y: -10 }}
+           animate={{ opacity: 1, y: 0 }}
+           transition={{ delay: 0.1 }}
+           className="mb-6"
+         >
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors duration-200 ease-in-out group"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2 transition-transform duration-200 ease-in-out group-hover:-translate-x-1" />
+            Back to Properties
+          </Link>
+        </motion.div>
 
-          <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Build Report for {siteUrl}</h2>
-            
-            {/* Report Builder */}
-            <ReportBuilderProvider siteUrl={siteUrl}>
-              <ReportBuilder siteUrl={siteUrl} />
-            </ReportBuilderProvider>
-          </div>
-        </div>
-      </div>
+        <motion.h1
+           initial={{ opacity: 0, x: -20 }}
+           animate={{ opacity: 1, x: 0 }}
+           transition={{ delay: 0.2 }}
+           className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white mb-4 truncate"
+         >
+           Report Builder: <span className="font-medium text-gray-700 dark:text-gray-300">{siteUrl}</span>
+         </motion.h1>
+
+         {error && userProfile && (
+           <motion.div
+             initial={{ opacity: 0, y: -10 }}
+             animate={{ opacity: 1, y: 0 }}
+             className="mb-6 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative dark:bg-red-900 dark:border-red-700 dark:text-red-300"
+             role="alert"
+           >
+              <strong className="font-bold mr-2"><AlertTriangle className="inline w-5 h-5 mr-1"/>Notice:</strong>
+              <span className="block sm:inline">{error}</span>
+           </motion.div>
+         )}
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white dark:bg-gray-800 shadow-xl rounded-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700"
+        >
+          <ReportBuilderProvider siteUrl={siteUrl}>
+            <ReportBuilder siteUrl={siteUrl} />
+          </ReportBuilderProvider>
+        </motion.div>
+      </AnimatedPageWrapper>
     </div>
   );
 } 

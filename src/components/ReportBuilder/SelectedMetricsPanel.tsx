@@ -15,13 +15,13 @@ export const SelectedMetricsPanel: React.FC = () => {
 
   const isEmpty = selectedMetrics.length === 0;
   const dropIndicatorClasses = isOver
-    ? 'border-blue-300 bg-blue-50'
-    : 'border-dashed border-gray-300';
+    ? 'border-blue-300 bg-blue-50 dark:border-blue-500 dark:bg-blue-900/20'
+    : 'border-dashed border-gray-300 dark:border-gray-600';
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">Selected Metrics</h2>
-      <p className="text-sm text-gray-500 mb-4">
+    <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow">
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">Selected Metrics</h2>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
         {isEmpty
           ? 'Drag metrics here to include them in your report.'
           : 'Drag to reorder. Click × to remove.'}
@@ -33,7 +33,7 @@ export const SelectedMetricsPanel: React.FC = () => {
       >
         {isEmpty ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-sm text-gray-400">Drop metrics here</p>
+            <p className="text-sm text-gray-400 dark:text-gray-500">Drop metrics here</p>
           </div>
         ) : (
           <SortableContext items={selectedMetrics.map(m => m.id)} strategy={verticalListSortingStrategy}>
