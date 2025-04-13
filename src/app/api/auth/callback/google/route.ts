@@ -61,21 +61,54 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/?error=db_error', request.url));
     }
 
-    // Store tokens in database
+    const userId = user.id;
+
+    // Fetch existing tokens for the user to preserve refresh token if needed
+    const { data: existingTokenData } = await supabaseAdmin
+      .from('tokens')
+      .select('refresh_token')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    // Prepare token data for upsert
+    const tokenUpsertData: {
+      user_id: string;
+      access_token: string;
+      refresh_token?: string;
+      expiry_date: string;
+      scope?: string;
+    } = {
+      user_id: userId,
+      access_token: tokens.access_token,
+      expiry_date: expiryDate.toISOString(),
+      scope: tokens.scope,
+    };
+
+    // Set refresh_token in the upsert data ONLY if we have one
+    if (tokens.refresh_token) {
+      tokenUpsertData.refresh_token = tokens.refresh_token;
+    } else if (existingTokenData?.refresh_token) {
+      tokenUpsertData.refresh_token = existingTokenData.refresh_token;
+    } else {
+      console.warn(`[api/auth/callback/google] No new or existing refresh token found for user ID: ${userId}. Omitting from upsert.`);
+    }
+
+    // Store tokens in database using upsert
+    console.log('[api/auth/callback/google] Attempting token upsert for user ID:', userId);
+    console.log('[api/auth/callback/google] Upsert data prepared:', JSON.stringify(tokenUpsertData, null, 2));
     const { error: tokenError } = await supabaseAdmin
       .from('tokens')
-      .upsert({
-        user_id: user.id,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token || '',
-        expiry_date: expiryDate.toISOString(),
-        scope: tokens.scope,
+      .upsert(tokenUpsertData, {
+        onConflict: 'user_id',
       });
 
     if (tokenError) {
-      console.error('Error storing tokens:', tokenError);
+      // Log the detailed error
+      console.error('[api/auth/callback/google] Error upserting tokens:', JSON.stringify(tokenError, null, 2));
       return NextResponse.redirect(new URL('/?error=token_error', request.url));
     }
+
+    console.log('[api/auth/callback/google] Token upsert successful for user ID:', userId);
 
     // Create JWT for the user session
     const token = await createToken({ sub: user.id });
