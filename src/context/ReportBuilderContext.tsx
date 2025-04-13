@@ -50,36 +50,6 @@ const getLast7Days = (): TimeRange => {
   };
 };
 
-// Get last 28 days range
-const _getLast28Days = (): TimeRange => {
-  const endDate = new Date();
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - 28);
-  
-  return {
-    type: 'last28days',
-    name: 'Last 28 Days',
-    startDate,
-    endDate,
-    isCustom: false,
-  };
-};
-
-// Get last 3 months range
-const _getLast3Months = (): TimeRange => {
-  const endDate = new Date();
-  const startDate = new Date();
-  startDate.setMonth(startDate.getMonth() - 3);
-  
-  return {
-    type: 'last3months',
-    name: 'Last 3 Months',
-    startDate,
-    endDate,
-    isCustom: false,
-  };
-};
-
 interface ReportBuilderContextProps {
   availableMetrics: Metric[];
   selectedMetrics: Metric[];

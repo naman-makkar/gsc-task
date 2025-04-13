@@ -4,9 +4,6 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { IntentAnalysis, batchAnalyzeIntents } from '@/lib/gemini';
 import { getExistingIntents, storeIntentAnalysis } from '@/lib/intent-storage';
 
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000; // 1 second
-
 // Helper for default analysis structure
 const defaultAnalysis = (query: string): IntentAnalysis => ({
   query,
@@ -94,10 +91,8 @@ export async function POST(request: NextRequest) {
       // Limit if not using single prompt, otherwise analyze all needing it
       const maxQueriesToAnalyze = useSinglePromptMode ? queriesToAnalyze.length : 10; 
       let limitedQueries = queriesToAnalyze;
-      let hasMoreQueries = false;
       if (queriesToAnalyze.length > maxQueriesToAnalyze) {
         limitedQueries = queriesToAnalyze.slice(0, maxQueriesToAnalyze);
-        hasMoreQueries = true;
         console.log(`[analyze-intents] Limiting NEW Gemini analysis to ${maxQueriesToAnalyze} queries.`);
       }
 
@@ -105,10 +100,11 @@ export async function POST(request: NextRequest) {
       try {
         newIntents = await batchAnalyzeIntents(limitedQueries, batchSize);
         console.log(`[analyze-intents] Gemini analysis completed for ${newIntents.length} newly analyzed queries.`);
-      } catch (error: any) {
+      } catch (error: unknown) {
          console.error('[analyze-intents] Error during Gemini batch analysis:', error);
          // Handle rate limit error specifically
-         if (error.message?.includes('429') || error.message?.includes('Too Many Requests')) {
+         const errorMessage = error instanceof Error ? error.message : String(error);
+         if (errorMessage?.includes('429') || errorMessage?.includes('Too Many Requests')) {
            return NextResponse.json({
              error: 'Rate limit exceeded on Gemini API.',
              partialSuccess: existingIntents.length > 0,
@@ -165,11 +161,12 @@ export async function POST(request: NextRequest) {
       remainingQueries: 0 
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[analyze-intents] Top-level error:', error);
-    if (error.message?.includes('429')) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage?.includes('429')) {
       return NextResponse.json({ error: 'Rate limit likely exceeded.', rateLimited: true }, { status: 429 });
     }
-    return NextResponse.json({ error: 'Failed to analyze query intents', details: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to analyze query intents', details: errorMessage }, { status: 500 });
   }
 } 

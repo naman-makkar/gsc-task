@@ -42,13 +42,12 @@ export async function GET(request: NextRequest) {
       dbTokensExpiry: dbTokens ? dbTokens.expiry_date : null,
       serverTime: new Date().toISOString()
     });
-  } catch (error: any) {
-    console.error('Error in auth debug endpoint:', error);
-    
-    return NextResponse.json({
-      error: 'Error checking authentication status',
-      message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    }, { status: 500 });
+  } catch (error: unknown) {
+    console.error('Error fetching auth status:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json(
+      { error: 'Failed to retrieve auth status', details: message },
+      { status: 500 }
+    );
   }
 } 

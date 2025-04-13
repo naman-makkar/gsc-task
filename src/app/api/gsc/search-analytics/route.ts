@@ -59,11 +59,12 @@ export async function GET(request: NextRequest) {
     );
     
     return NextResponse.json(data);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching search analytics:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
     
     // Handle token expiry or auth errors
-    if (error.message?.includes('auth') || error.code === 401) {
+    if (message?.includes('auth') || message === 'Authentication failed') {
       return NextResponse.json(
         { error: 'Authentication failed' },
         { status: 401 }
@@ -71,7 +72,7 @@ export async function GET(request: NextRequest) {
     }
     
     return NextResponse.json(
-      { error: 'Failed to fetch search analytics data' },
+      { error: 'Failed to fetch search analytics data', details: message },
       { status: 500 }
     );
   }

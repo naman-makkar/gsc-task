@@ -59,10 +59,14 @@ export async function GET(request: NextRequest) {
       intents
     });
     
-  } catch (error: any) {
-    console.error('Error fetching report intents:', error);
+  } catch (error: unknown) {
+    // Get reportId from searchParams within the catch block if needed
+    const searchParams = request.nextUrl.searchParams;
+    const reportIdForError = searchParams.get('reportId');
+    console.error(`[report-intents] Error fetching intents for report ${reportIdForError || 'UNKNOWN'}:`, error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'Failed to fetch report intents', details: error.message },
+      { error: 'Failed to retrieve intent analysis', details: message },
       { status: 500 }
     );
   }

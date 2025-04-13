@@ -53,10 +53,11 @@ export async function POST(request: NextRequest) {
       reportId
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving report:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'Failed to save report data', details: error.message },
+      { error: 'Failed to save report', details: message },
       { status: 500 }
     );
   }

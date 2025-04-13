@@ -5,9 +5,6 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useReportBuilder } from '@/context/ReportBuilderContext';
 import { SortableMetric } from './SortableMetric';
-import { Plus, Trash2 } from 'lucide-react';
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, DragOverlay, Active } from '@dnd-kit/core';
-import { useState } from 'react';
 
 export const SelectedMetricsPanel: React.FC = () => {
   const { selectedMetrics, removeMetric } = useReportBuilder();

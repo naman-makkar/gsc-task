@@ -52,9 +52,9 @@ export default function SiteDashboard() {
         // No need to explicitly save selected site here if API call is robust
         // The primary action is displaying the builder for the given siteUrl
 
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Site Dashboard fetch error:", err);
-        setError(err.message || 'An unexpected error occurred loading site data.');
+        setError(err instanceof Error ? err.message : 'An unexpected error occurred loading site data.');
       } finally {
         setIsLoading(false);
       }
@@ -67,9 +67,9 @@ export default function SiteDashboard() {
     try {
       await fetch('/api/auth/logout');
       router.push('/');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Logout failed:", error);
-      // Handle error display
+      // Handle logout error display if necessary
     }
   };
 

@@ -94,10 +94,11 @@ export async function GET(request: NextRequest) {
       });
     }
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error getting reports:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'Failed to get report data', details: error.message },
+      { error: 'Failed to get report data', details: message },
       { status: 500 }
     );
   }

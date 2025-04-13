@@ -15,6 +15,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@google/generative-ai": "^0.24.0",
     "@headlessui/react": "^2.2.1",
+    "@radix-ui/react-avatar": "^1.1.4",
     "@supabase/supabase-js": "^2.49.4",
     "@tanstack/react-table": "^8.21.2",
     "clsx": "^2.1.1",

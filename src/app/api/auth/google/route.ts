@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUrl } from '@/lib/google';
-import { getUserFromRequest, getUserSites } from '@/lib/auth';
+import { getUserFromRequest } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,8 +9,6 @@ export async function GET(request: NextRequest) {
     if (!user) {
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_BASE_URL}/?error=Authentication failed`);
     }
-
-    const _response = await getUserSites(user.id);
 
     // Generate Google OAuth URL with appropriate scopes
     const authUrl = getAuthUrl();
