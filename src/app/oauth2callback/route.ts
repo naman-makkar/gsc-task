@@ -54,89 +54,86 @@ export async function GET(request: NextRequest) {
       expiryDate.setSeconds(expiryDate.getSeconds() + Number(tokens.expires_in));
     }
 
-    // First check if user already exists in the database
-    const { data: existingUser } = await supabaseAdmin
+    // Store or update user in database using upsert
+    console.log('Upserting user data for:', userInfo.email);
+    const { data: user, error: userError } = await supabaseAdmin
       .from('users')
-      .select('id')
-      .eq('email', userInfo.email)
+      .upsert({
+        email: userInfo.email,
+        name: userInfo.name || '',
+        avatar_url: userInfo.picture || '',
+      }, {
+        onConflict: 'email', // Specify the conflict target
+        // ignoreDuplicates: false, // This is the default, ensures update happens
+      })
+      .select('id') // Select the id after upsert
       .single();
 
-    let userId;
-
-    if (existingUser) {
-      // User exists, use existing ID
-      console.log('Found existing user with ID:', existingUser.id);
-      userId = existingUser.id;
-      
-      // Update user profile info (optional)
-      await supabaseAdmin
-        .from('users')
-        .update({
-          name: userInfo.name || '',
-          avatar_url: userInfo.picture || '',
-        })
-        .eq('id', userId);
-    } else {
-      // User doesn't exist, create new
-      console.log('Creating new user for:', userInfo.email);
-      const { data: newUser, error: createError } = await supabaseAdmin
-        .from('users')
-        .insert({
-          email: userInfo.email,
-          name: userInfo.name || '',
-          avatar_url: userInfo.picture || '',
-        })
-        .select('id')
-        .single();
-
-      if (createError || !newUser) {
-        console.error('Error creating user:', createError);
-        return NextResponse.redirect(new URL('/?error=db_error', request.url));
-      }
-      
-      userId = newUser.id;
+    if (userError || !user) {
+      console.error('Error upserting user:', userError);
+      return NextResponse.redirect(new URL('/?error=db_error', request.url));
     }
 
-    // Check if tokens already exist for this user
-    const { data: existingTokens } = await supabaseAdmin
+    const userId = user.id;
+    console.log('User ID after upsert:', userId);
+
+    // Fetch existing tokens for the user to preserve refresh token if needed
+    const { data: existingTokenData } = await supabaseAdmin
       .from('tokens')
-      .select('id, refresh_token')
+      .select('refresh_token')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle(); // Use maybeSingle as the token might not exist yet
 
-    // Store or update tokens
-    if (existingTokens) {
-      // Update existing tokens
-      const { error: updateError } = await supabaseAdmin
-        .from('tokens')
-        .update({
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token || existingTokens.refresh_token, // Keep existing refresh token if new one not provided
-          expiry_date: expiryDate.toISOString(),
-          scope: tokens.scope,
-        })
-        .eq('user_id', userId);
+    // Prepare token data for upsert, initially without refresh_token
+    const tokenUpsertData: {
+      user_id: string;
+      access_token: string;
+      refresh_token?: string; // Still keep optional in type for clarity
+      expiry_date: string;
+      scope?: string;
+    } = {
+      user_id: userId,
+      access_token: tokens.access_token,
+      expiry_date: expiryDate.toISOString(),
+      scope: tokens.scope,
+    };
 
-      if (updateError) {
-        console.error('Error updating tokens:', updateError);
-        return NextResponse.redirect(new URL('/?error=token_error', request.url));
-      }
+    // Set refresh_token in the upsert data ONLY if we have one
+    if (tokens.refresh_token) {
+      tokenUpsertData.refresh_token = tokens.refresh_token;
+      console.log('Using new refresh token provided by Google.');
+    } else if (existingTokenData?.refresh_token) {
+      tokenUpsertData.refresh_token = existingTokenData.refresh_token;
+      console.log('Using existing refresh token from database.');
     } else {
-      // Insert new tokens
-      const { error: insertError } = await supabaseAdmin
-        .from('tokens')
-        .insert({
-          user_id: userId,
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token || '',
-          expiry_date: expiryDate.toISOString(),
-          scope: tokens.scope,
-        });
+      // No new refresh token from Google and no existing one found.
+      // Do NOT add refresh_token to the upsert data.
+      // This relies on the DB column being nullable or the UPSERT logic handling updates correctly without it.
+      console.warn(`No new or existing refresh token found for user ID: ${userId}. Omitting refresh_token from upsert data.`);
+    }
 
-      if (insertError) {
-        console.error('Error storing tokens:', insertError);
-        return NextResponse.redirect(new URL('/?error=token_error', request.url));
-      }
+    // Store or update tokens in database using upsert
+    console.log('Attempting to upsert token data for user ID:', userId);
+    // Log the exact data being prepared for upsert, censoring sensitive parts if necessary in real logs
+    console.log('Upsert data prepared:', JSON.stringify(tokenUpsertData, null, 2)); 
+
+    const { error: tokenError } = await supabaseAdmin
+      .from('tokens')
+      .upsert(tokenUpsertData, { // Pass the prepared data
+        onConflict: 'user_id', // Specify the conflict target
+        // ignoreDuplicates: false, // Ensure update happens
+      });
+
+    if (tokenError) {
+      // Log the detailed error object for debugging
+      console.error('Error upserting tokens:', JSON.stringify(tokenError, null, 2)); 
+      // Specific check for refresh token potentially being null if Google doesn't always return it
+      // and the DB constraint requires it not to be null.
+      // For now, just log and redirect.
+      return NextResponse.redirect(new URL('/?error=token_error', request.url));
+    } else {
+      // Add success log for confirmation
+      console.log('Token upsert successful for user ID:', userId); 
     }
 
     // Create JWT for the user session
