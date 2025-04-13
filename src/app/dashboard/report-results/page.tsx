@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'reac
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Loader2, AlertTriangle, ArrowLeft, Calendar, FileText, BrainCircuit, Download, Sheet, CheckCircle, XCircle } from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowLeft, Calendar, FileText, BrainCircuit, Download, Sheet, CheckCircle, XCircle, Sparkles } from 'lucide-react';
 import { IntentAnalysis, SEOIntent } from '@/lib/gemini';
 import {
   useReactTable,
@@ -632,28 +632,33 @@ function ReportResultsContent() {
                 {/* Analyze Intents Button */}
                 <button
                    onClick={handleAnalyzeIntents}
-                   disabled={isAnalyzingIntents || isLoadingIntents || intents.length > 0} // Disable if already analyzed or loading
-                   className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white transition-colors duration-200 ease-in-out transform hover:scale-[1.03] disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100
-                    ${isAnalyzingIntents || isLoadingIntents ? 'bg-gray-400 dark:bg-gray-600' : intents.length > 0 ? 'bg-green-600' : 'bg-purple-600 hover:bg-purple-700'}`}
+                   disabled={isLoadingIntents || isAnalyzingIntents || !reportData?.data?.length}
+                   className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ease-in-out"
                 >
-                   <BrainCircuit className={`mr-2 h-5 w-5 ${isAnalyzingIntents || isLoadingIntents ? 'animate-pulse' : ''}`} />
-                   {isAnalyzingIntents ? 'Analyzing...' : isLoadingIntents ? 'Loading Intents...': intents.length > 0 ? 'Intents Analyzed' : 'Analyze Query Intents'}
+                   {isAnalyzingIntents ? (
+                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                   ) : (
+                     <Sparkles className="mr-2 h-4 w-4" />
+                   )}
+                   {isAnalyzingIntents ? 'Analyzing...' : intents.length > 0 ? 'Re-Analyze Intents with AI' : 'Analyze Intents with AI'}
                 </button>
 
                 {/* Export Buttons */} 
                 <button
                    onClick={intents.length > 0 ? handleExportCSVWithIntents : handleExportCSV}
-                   className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 ease-in-out transform hover:scale-[1.03]"
+                   disabled={!reportData?.data?.length}
+                   className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ease-in-out"
                  >
-                   <Download className="mr-2 h-5 w-5" /> Export CSV
+                   <Download className="mr-2 h-4 w-4" />
+                   {intents.length > 0 ? 'Export CSV (with Intents)' : 'Export CSV'}
                  </button>
                  <button
                      onClick={handleExportToSheets}
-                     disabled={isExportingSheet}
-                     className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 ease-in-out transform hover:scale-[1.03] disabled:opacity-50 disabled:cursor-not-allowed"
+                     disabled={isExportingSheet || !reportData?.data?.length}
+                     className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ease-in-out"
                    >
-                     <Sheet className={`mr-2 h-5 w-5 ${isExportingSheet ? 'animate-pulse' : ''}`} />
-                     {isExportingSheet ? 'Exporting...' : 'Export to Google Sheets'}
+                     {isExportingSheet ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sheet className="mr-2 h-4 w-4" />}
+                     {isExportingSheet ? 'Exporting...' : 'Export to Google Sheet'}
                    </button>
              </div>
              {/* Rate Limit Info */}
