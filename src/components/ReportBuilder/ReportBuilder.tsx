@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import { 
   DndContext, 
   DragEndEvent,
@@ -14,13 +14,9 @@ import {
   closestCenter
 } from '@dnd-kit/core';
 import {
-  arrayMove,
-  SortableContext,
   sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { useReportBuilder } from '@/context/ReportBuilderContext';
-import { Metric } from '@/lib/types';
 
 import { MetricSelector } from './MetricSelector';
 import { SelectedMetricsPanel } from './SelectedMetricsPanel';
@@ -34,13 +30,12 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ siteUrl }) => {
   const { 
     selectedMetrics, 
     addMetric, 
-    removeMetric, 
     availableMetrics,
     reorderSelectedMetrics,
     getReportConfig
   } = useReportBuilder();
   
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [, _setActiveId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Configure the sensors
@@ -66,7 +61,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ siteUrl }) => {
   // When drag starts
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
-    setActiveId(active.id as string);
+    _setActiveId(active.id as string);
   };
 
   // When dragging over a droppable area
@@ -89,7 +84,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ siteUrl }) => {
   // When drag ends
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    setActiveId(null);
+    _setActiveId(null);
 
     // If dropping to reorder within the selected metrics
     if (
@@ -152,7 +147,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ siteUrl }) => {
         throw new Error(errorData.error || 'Failed to generate report');
       }
       
-      const reportData = await response.json();
+      const reportData: Record<string, unknown> = await response.json();
       
       // Save report data to localStorage for the results page to use
       localStorage.setItem('lastReportData', JSON.stringify(reportData));
@@ -175,7 +170,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ siteUrl }) => {
   };
 
   // Function to save the report to Supabase
-  const saveReportToSupabase = async (reportData: any, reportId: string) => {
+  const saveReportToSupabase = async (reportData: Record<string, unknown>, reportId: string) => {
     try {
       const saveResponse = await fetch('/api/reports/save', {
         method: 'POST',

@@ -124,24 +124,12 @@ export async function POST(request: NextRequest) {
             spreadsheetUrl: spreadsheetUrl,
         });
 
-    } catch (error: any) {
-        console.error('[sheets/export] Error exporting to Google Sheets:', error);
-        let errorMessage = 'Failed to export to Google Sheets.';
-        let status = 500;
-
-        // Check for specific Google API errors
-        if (error.response?.data?.error) {
-            const googleError = error.response.data.error;
-            errorMessage = googleError.message || errorMessage;
-            status = googleError.code || status;
-            console.error('[sheets/export] Google API Error Details:', googleError);
-            if (status === 403) {
-                 errorMessage = 'Permission denied. Ensure the Google Sheets API is enabled and the required scope was granted.';
-            }
-        } else if (error.message) {
-            errorMessage = error.message;
-        }
-
-        return NextResponse.json({ error: errorMessage }, { status: status });
+    } catch (error: unknown) {
+        console.error('Error exporting to Google Sheets:', error);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return NextResponse.json(
+          { success: false, error: 'Failed to export data to Google Sheets', details: message }, 
+          { status: 500 }
+        );
     }
 } 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/auth';
 import { querySearchAnalytics } from '@/lib/google';
-import { MetricType, TimeRange } from '@/lib/types';
+import { MetricType } from '@/lib/types';
 
 interface ReportRequest {
   siteUrl: string;
@@ -95,11 +95,11 @@ export async function POST(request: NextRequest) {
       }
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error generating report:', error);
-    
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'Failed to generate report', details: error.message },
+      { error: 'Failed to generate report', details: message },
       { status: 500 }
     );
   }

@@ -13,7 +13,7 @@ if (!JWT_SECRET) {
 }
 
 // Create a JWT token for the user
-export const createToken = async (payload: any): Promise<string> => {
+export const createToken = async (payload: Record<string, unknown>): Promise<string> => {
   if (!JWT_SECRET) {
     console.error('Error creating token: JWT_SECRET is not defined');
     throw new Error('JWT_SECRET is not defined');
@@ -38,7 +38,7 @@ export const createToken = async (payload: any): Promise<string> => {
 };
 
 // Verify JWT token
-export const verifyToken = async (token: string): Promise<any> => {
+export const verifyToken = async (token: string): Promise<Record<string, unknown> | null> => {
   if (!JWT_SECRET) {
     console.error('Error verifying token: JWT_SECRET is not defined');
     throw new Error('JWT_SECRET is not defined');

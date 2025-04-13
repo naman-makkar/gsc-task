@@ -2,9 +2,12 @@
 
 import React, { useState } from 'react';
 import { format } from 'date-fns';
-import { DateRange } from 'react-date-range';
+import { DateRange, RangeKeyDict } from 'react-date-range';
 import { useReportBuilder } from '@/context/ReportBuilderContext';
 import { TimeRange, TimeRangeType } from '@/lib/types';
+import 'react-date-range/dist/styles.css';
+import 'react-date-range/dist/theme/default.css';
+// import './rdrDarkMode.css'; // Comment out missing file import
 
 // Helper function to get predefined ranges
 const getLast7Days = (): TimeRange => {
@@ -71,9 +74,11 @@ export const TimeRangeSelector: React.FC = () => {
     },
   ];
 
-  const handleDateRangeChange = (ranges: any) => {
-    const { startDate, endDate } = ranges.selection;
-    setCustomDateRange(startDate, endDate);
+  const handleDateRangeChange = (ranges: RangeKeyDict) => {
+    const selection = ranges.selection;
+    if (selection?.startDate && selection?.endDate) {
+      setCustomDateRange(selection.startDate, selection.endDate);
+    }
   };
 
   const handleSelectTimeRange = (rangeOption: TimeRange) => {

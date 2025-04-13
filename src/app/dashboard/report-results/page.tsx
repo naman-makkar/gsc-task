@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'reac
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Loader2, AlertTriangle, ArrowLeft, Calendar, FileText, BrainCircuit, Download, Sheet, CheckCircle, XCircle } from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowLeft, BrainCircuit, Download, Sheet, CheckCircle, XCircle } from 'lucide-react';
 import { IntentAnalysis, SEOIntent } from '@/lib/gemini';
 import {
   useReactTable,
@@ -21,9 +21,19 @@ import {
 import AnimatedPageWrapper from '@/components/ui/AnimatedPageWrapper';
 import DashboardHeader from '@/components/ui/DashboardHeader';
 
+// Define structure for individual rows from GSC API data
+interface GscApiDataRow {
+  keys: string[];
+  clicks?: number;
+  impressions?: number;
+  ctr?: number;
+  position?: number;
+  // Add other potential metrics if known
+}
+
 interface ReportData {
   success: boolean;
-  data: any[];
+  data: GscApiDataRow[]; // Use the specific row type
   request: {
     siteUrl: string;
     metrics: string[];
@@ -33,6 +43,22 @@ interface ReportData {
     };
     dimensions: string[];
   };
+}
+
+// Type for the response from /api/gemini/analyze-intents
+interface IntentAnalysisResponse {
+    success: boolean;
+    reportId: string;
+    total: number;
+    cached: number;
+    new: number;
+    intents: IntentAnalysis[];
+    hasMoreQueries: boolean;
+    remainingQueries: number;
+    error?: string;
+    rateLimited?: boolean;
+    partialSuccess?: boolean;
+    suggestion?: string;
 }
 
 interface ReportRow {
@@ -80,11 +106,11 @@ function ReportResultsContent() {
   const searchParams = useSearchParams();
   const reportId = searchParams.get('reportId');
   
-  const [reportData, setReportData] = useState<ReportData | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingIntents, setIsLoadingIntents] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [_reportData, _setReportData] = useState<ReportData | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isLoadingIntents, setIsLoadingIntents] = useState(false);
   const [intents, setIntents] = useState<IntentAnalysis[]>([]);
   const [isAnalyzingIntents, setIsAnalyzingIntents] = useState(false);
   const [intentsError, setIntentsError] = useState<string | null>(null);
@@ -181,18 +207,19 @@ function ReportResultsContent() {
         }
 
         if (loadedReportData) {
-            setReportData(loadedReportData);
+            _setReportData(loadedReportData);
              // Load intents if reportId is available (either from URL or potentially from loadedReportData if stored)
-            const effectiveReportId = reportId || (loadedReportData as any)?.reportId; // Adjust if reportId is stored differently
+            const effectiveReportId = reportId || (loadedReportData as ReportData)?.request?.siteUrl; // Adjust if reportId is stored differently
             if (effectiveReportId) {
                 await loadIntents(effectiveReportId);
             }
         }
 
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Error loading report results page:", err);
-        setError(err.message || 'Failed to load page data');
-        setReportData(null); // Clear report data on error
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        setError(message || 'Failed to load page data');
+        _setReportData(null); // Clear report data on error
         setIntents([]); // Clear intents on error
         setUserProfile(null); // Clear profile on error if necessary
       } finally {
@@ -205,9 +232,9 @@ function ReportResultsContent() {
   
   // Prepare data for table
   const tableData = useMemo<ReportRow[]>(() => {
-    if (!reportData?.data) return [];
-    return reportData.data.map(row => {
-      const query = row.keys[0];
+    if (!_reportData?.data) return [];
+    return _reportData.data.map((row: GscApiDataRow) => { // Use GscApiDataRow type
+      const query = row.keys?.[0] ?? 'Unknown Query'; // Handle potentially missing keys
       const intentData = intents.find(i => i.query === query);
       return {
         query: query,
@@ -221,13 +248,13 @@ function ReportResultsContent() {
         main_keywords: intentData?.main_keywords,
       };
     });
-  }, [reportData, intents]);
+  }, [_reportData, intents]);
 
   // Define table columns
   const columns = useMemo<ColumnDef<ReportRow>[]>(() => {
-    if (!reportData?.request?.metrics) return [];
+    if (!_reportData?.request?.metrics) return [];
 
-    const metricColumns: ColumnDef<ReportRow>[] = reportData.request.metrics.map(metric => ({
+    const metricColumns: ColumnDef<ReportRow>[] = _reportData.request.metrics.map(metric => ({
       accessorKey: metric,
       header: ({ column }) => (
         <button
@@ -292,7 +319,7 @@ function ReportResultsContent() {
         cell: info => <span className="text-xs text-gray-600 dark:text-gray-400">{info.getValue<string>() || 'N/A'}</span>,
       },
     ];
-  }, [reportData, intents]);
+  }, [_reportData, intents]);
 
   // TanStack Table instance
   const table = useReactTable({
@@ -317,160 +344,130 @@ function ReportResultsContent() {
 
   // Analysis & Export Handlers
   const handleAnalyzeIntents = async () => {
-    if (!reportData || !reportId) return;
-    
+    if (!_reportData || !reportId) return;
+
     try {
-      setIsAnalyzingIntents(true);
-      setIntentsError(null);
-      setRateLimitInfo(null);
       setIsLoadingIntents(true);
-      
-      const visibleQueries = reportData.data.slice(0, 100).map(row => row.keys[0]);
-      
-      const intentResponse = await fetch(`/api/gemini/report-intents?reportId=${reportId}`);
-      
-      if (intentResponse.ok) {
-        const intentData = await intentResponse.json();
-        
-        if (intentData.success && intentData.intents.length > 0) {
-          setIntents(intentData.intents);
-          if (intentData.intents.length >= visibleQueries.length) {
-            setIsAnalyzingIntents(false);
-            return;
-          }
-        }
-      }
-      
+      setIntentsError(null);
+
+      const queriesToAnalyze = _reportData.data.map((row: GscApiDataRow) => row.keys?.[0]).filter(Boolean) as string[];
+
       const response = await fetch('/api/gemini/analyze-intents', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          reportId,
-          queries: visibleQueries,
-          visibleOnly: true
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reportId, queries: queriesToAnalyze, visibleOnly: true }), // Send queries
       });
-      
-      const data = await response.json();
-      
-      if (response.status === 429) {
-        setRateLimitInfo({
-          rateLimited: true,
-          processed: data.processed || 0,
-          remaining: data.remaining || visibleQueries.length,
-          suggestion: data.suggestion || 'Try again in a few minutes'
-        });
-        
-        if (data.partialSuccess && data.intents) {
-          setIntents(data.intents);
-        }
-        
-        setIntentsError('Rate limit exceeded. ' + (data.error || 'Try again in a few minutes.'));
-      } else if (!response.ok) {
-        throw new Error(data.error || 'Failed to analyze intents');
-      } else if (data.success) {
-        setIntents(data.intents);
-        
-        if (data.hasMoreQueries) {
-          setRateLimitInfo({
-            rateLimited: true,
-            processed: data.total - data.remainingQueries,
-            remaining: data.remainingQueries,
-            suggestion: 'Only analyzed a portion of queries due to rate limits. Try analyzing the rest later.'
-          });
-        }
+
+      const data: IntentAnalysisResponse = await response.json(); // Use IntentAnalysisResponse type
+
+      if (!response.ok || !data.success) {
+         // Handle specific errors like rate limiting
+         if (data.rateLimited) {
+            setIntentsError(`Rate limit hit. ${data.suggestion || 'Please try again later.'}`);
+         } else {
+            throw new Error(data.error || 'Failed to analyze intents');
+         }
       } else {
-        throw new Error('Failed to analyze intents');
+        // Combine new intents with potentially existing ones if partial success
+        // Assuming the API returns all relevant intents for the request
+        setIntents(data.intents || []); 
       }
-    } catch (err: any) {
+      
+    } catch (err: unknown) { // Keep unknown
       console.error('Error analyzing intents:', err);
-      setIntentsError(err.message || 'An error occurred while analyzing intents');
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setIntentsError(message || 'An error occurred while analyzing intents');
     } finally {
-      setIsAnalyzingIntents(false);
       setIsLoadingIntents(false);
+      setIsAnalyzingIntents(false); // Ensure this is set correctly
     }
   };
   
   const handleExportCSVWithIntents = () => {
-    if (!reportData || intents.length === 0) return;
+    if (!_reportData || intents.length === 0) return;
     
     const headers = [
       'Query',
-      ...reportData.request.metrics,
+      ..._reportData.request.metrics,
       'Intent',
       'Category',
       'Funnel Stage',
       'Main Keywords'
     ];
-    
-    const rows = reportData.data.map(row => {
-      const query = row.keys[0];
+
+    const rows = _reportData.data.map((row: GscApiDataRow) => { 
+      const query = row.keys?.[0] ?? ''; 
       const intentData = intents.find(i => i.query === query);
       
-      return [
-        `"${query.replace(/"/g, '""')}"`,
-        ...reportData.request.metrics.map(metric => row[metric] || 0),
+      // Create an array for the row data
+      const rowData = [
+        query, // Query first
+        ..._reportData.request.metrics.map(metric => row[metric as keyof GscApiDataRow] ?? 0),
         intentData?.intent || 'Unknown',
         intentData?.category || 'Unknown',
         intentData?.funnel_stage || 'Unknown',
-        `"${(intentData?.main_keywords || []).join(', ')}"`
+        (intentData?.main_keywords || []).join(', ') // Join keywords
       ];
+
+      // Escape each value for CSV
+      return rowData.map(value => 
+        typeof value === 'number' 
+          ? value 
+          : `"${String(value ?? '').replace(/"/g, '""')}"`
+      );
+    });
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    downloadCSV(csvContent, `report_with_intents_${reportId}.csv`);
+  };
+
+  const handleExportCSV = () => {
+    if (!_reportData) return;
+
+    const headers = ['Query', ..._reportData.request.metrics];
+    const rows = _reportData.data.map((row: GscApiDataRow) => { 
+      const query = row.keys?.[0] ?? '';
+      const rowData = [
+        query,
+        ..._reportData.request.metrics.map(metric => row[metric as keyof GscApiDataRow] ?? 0)
+      ];
+      return rowData.map(value => 
+        typeof value === 'number' 
+          ? value 
+          : `"${String(value ?? '').replace(/"/g, '""')}"`
+      );
     });
     
     const csvContent = [
       headers.join(','),
       ...rows.map(row => row.join(','))
     ].join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `gsc-report-with-intents-${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+    downloadCSV(csvContent, `report_${reportId}.csv`);
   };
-  
-  const handleExportCSV = () => {
-    if (!reportData) return;
-    
-    const headers = ['Query', ...reportData.request.metrics];
-    const rows = reportData.data.map(row => [
-      `"${row.keys[0].replace(/"/g, '""')}"`,
-      ...reportData.request.metrics.map(metric => row[metric] || 0)
-    ]);
-    
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `gsc-report-${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+  // Helper to trigger CSV download
+  const downloadCSV = (content: string, fileName: string) => {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    if (link.download !== undefined) { 
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", fileName);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
-  
-  // Calculate summary totals
-  const summaryTotals = useMemo(() => {
-    if (!reportData?.data) return { totalClicks: 0, totalImpressions: 0 };
-    return reportData.data.reduce((acc, row) => {
-      acc.totalClicks += row.clicks || 0;
-      acc.totalImpressions += row.impressions || 0;
-      return acc;
-    }, { totalClicks: 0, totalImpressions: 0 });
-  }, [reportData]);
-  
+
   // --- Handler for Exporting to Google Sheets ---
   const handleExportToSheets = async () => {
-    if (!reportData || !tableData) {
+    if (!_reportData || !tableData) {
       setExportSheetError('No report data available to export.');
       return;
     }
@@ -486,7 +483,7 @@ function ReportResultsContent() {
       // Order matters! Must match the desired sheet output.
       const explicitHeaders = [
           'Query', 
-          ...(reportData.request.metrics || []), // Include dynamic metrics
+          ...(_reportData.request.metrics || []), // Include dynamic metrics
           // Only include intent headers if intent data exists
           ...(intents.length > 0 ? ['Intent', 'Category', 'Funnel Stage', 'Main Keywords'] : []) 
       ];
@@ -494,7 +491,7 @@ function ReportResultsContent() {
       // Use the currently filtered and sorted rows from the table instance for export
       const rowsToExport = table.getRowModel().rows.map(row => row.original); 
       
-      const reportTitle = `GSC Report - ${reportData.request.siteUrl} - ${new Date().toISOString().slice(0, 10)}`;
+      const reportTitle = `GSC Report - ${_reportData.request.siteUrl} - ${new Date().toISOString().slice(0, 10)}`;
 
       // 2. Call the backend API endpoint
       console.log('[handleExportToSheets] Sending headers:', explicitHeaders);
@@ -525,9 +522,10 @@ function ReportResultsContent() {
         throw new Error('Export succeeded but no spreadsheet URL was returned.');
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error exporting to Google Sheets:', err);
-      setExportSheetError(err.message || 'An unknown error occurred during export.');
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setExportSheetError(message || 'An unknown error occurred during export.');
     } finally {
       setIsExportingSheet(false);
     }
@@ -554,7 +552,7 @@ function ReportResultsContent() {
   }
 
   // Error state (Consistent Styling)
-  if (error || !reportData) {
+  if (error || !_reportData) {
     // Check if the error is due to missing profile, otherwise show general error
     const isAuthError = error?.includes('profile') || !userProfile;
     return (
@@ -619,9 +617,9 @@ function ReportResultsContent() {
             <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-200">
               Report Results
             </h1>
-            {reportData.request && (
+            {_reportData.request && (
                <p className="text-gray-500 dark:text-gray-400 mt-1">
-                 For site: <span className="font-medium text-gray-700 dark:text-gray-300">{reportData.request.siteUrl}</span> | Date Range: <span className="font-medium text-gray-700 dark:text-gray-300">{reportData.request.timeRange.startDate} to {reportData.request.timeRange.endDate}</span>
+                 For site: <span className="font-medium text-gray-700 dark:text-gray-300">{_reportData.request.siteUrl}</span> | Date Range: <span className="font-medium text-gray-700 dark:text-gray-300">{_reportData.request.timeRange.startDate} to {_reportData.request.timeRange.endDate}</span>
                </p>
             )}
           </div>
