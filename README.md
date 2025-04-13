@@ -8,7 +8,7 @@ A comprehensive Next.js application designed to interact with Google Search Cons
 
 ## 🎥 Demo Video
 
-[![GSC Report Builder Demo](https://img.youtube.com/vi/-u-gBFsnxpc/maxresdefault.jpg)](https://youtu.be/-u-gBFsnxpc)
+[Watch Demo Video](https://youtu.be/-u-gBFsnxpc)
 
 ## 🔗 GitHub Repository
 
