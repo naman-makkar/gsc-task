@@ -6,6 +6,10 @@ A comprehensive Next.js application designed to interact with Google Search Cons
 
 [https://gsc-task.vercel.app/](https://gsc-task.vercel.app/)
 
+## 🎥 Demo Video
+
+[![GSC Report Builder Demo](https://img.youtube.com/vi/-u-gBFsnxpc/maxresdefault.jpg)](https://youtu.be/-u-gBFsnxpc)
+
 ## 🔗 GitHub Repository
 
 [https://github.com/naman-makkar/gsc-task](https://github.com/naman-makkar/gsc-task)
@@ -199,5 +203,5 @@ The easiest way to deploy this Next.js application is using the [Vercel Platform
 Ensure you configure the environment variables in your Vercel project settings.
 
 ## 🙏 Acknowledgements
-- thank you :)
 
+- thank you :)
