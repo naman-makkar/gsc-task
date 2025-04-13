@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Create JWT for the user session
-    const token = createToken({ sub: user.id });
+    const token = await createToken({ sub: user.id });
     
     // Create response with redirect to dashboard
     const response = NextResponse.redirect(new URL('/dashboard', request.url));

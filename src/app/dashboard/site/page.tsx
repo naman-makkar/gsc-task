@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -17,7 +17,8 @@ type UserProfile = {
   avatar?: string;
 };
 
-export default function SiteDashboard() {
+// Client component that uses useSearchParams
+function SiteDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const siteUrl = searchParams.get('url');
@@ -177,5 +178,19 @@ export default function SiteDashboard() {
         </motion.div>
       </AnimatedPageWrapper>
     </div>
+  );
+}
+
+// Main component with Suspense
+export default function SiteDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+        <Loader2 className="animate-spin h-12 w-12 text-blue-600 dark:text-blue-400" />
+        <span className="mt-4 text-lg text-gray-700 dark:text-gray-300">Loading site dashboard...</span>
+      </div>
+    }>
+      <SiteDashboardContent />
+    </Suspense>
   );
 } 

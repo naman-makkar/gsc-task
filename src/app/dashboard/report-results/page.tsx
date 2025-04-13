@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -74,7 +74,8 @@ const IntentBadge: React.FC<{ intent: SEOIntent | undefined }> = ({ intent }) =>
   );
 };
 
-export default function ReportResultsPage() {
+// Create a separate client component that uses useSearchParams
+function ReportResultsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const reportId = searchParams.get('reportId');
@@ -791,5 +792,21 @@ export default function ReportResultsPage() {
         </motion.div>
       </AnimatedPageWrapper>
     </div>
+  );
+}
+
+// Main component with Suspense
+export default function ReportResultsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gray-50 dark:bg-gray-900">
+        <div className="max-w-3xl w-full bg-white dark:bg-gray-800 rounded-lg shadow-md p-8 text-center">
+          <Loader2 className="h-8 w-8 mx-auto mb-4 animate-spin text-blue-500" />
+          <p className="text-gray-700 dark:text-gray-300">Loading report data...</p>
+        </div>
+      </div>
+    }>
+      <ReportResultsContent />
+    </Suspense>
   );
 } 

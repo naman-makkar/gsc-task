@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 
-export default function Home() {
+// Client component that uses useSearchParams
+function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
@@ -102,5 +103,20 @@ export default function Home() {
         </div>
       </div>
     </main>
+  );
+}
+
+// Main component with Suspense
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gray-50">
+        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8 text-center">
+          <p>Loading...</p>
+        </div>
+      </div>
+    }>
+      <LoginPage />
+    </Suspense>
   );
 }

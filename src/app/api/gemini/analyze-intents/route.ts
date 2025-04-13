@@ -79,8 +79,9 @@ export async function POST(request: NextRequest) {
     }
     
     // Step 2: Identify queries needing *new* Gemini analysis
-    const existingQueriesSet = new Set(existingIntents.map(item => item.query));
-    const queriesToAnalyze = queries.filter(query => !existingQueriesSet.has(query));
+    // Filter out queries that ALREADY have a valid (non-'Unknown') intent analysis
+    const validExistingIntents = new Map(existingIntents.filter(item => item.intent !== 'Unknown').map(item => [item.query, item]));
+    const queriesToAnalyze = queries.filter(query => !validExistingIntents.has(query));
     console.log(`[analyze-intents] ${queriesToAnalyze.length} queries need NEW Gemini analysis.`);
 
     // Step 3: Process queries needing NEW analysis with Gemini
