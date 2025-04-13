@@ -8,7 +8,7 @@ interface PropertyCardProps {
   siteUrl: string;
   permissionLevel: string;
   onSelect: (siteUrl: string) => void;
-  animationVariants?: any; // For staggered animation
+  animationVariants?: Record<string, any>; // Use Record<string, any>
   custom?: number; // For stagger index
 }
 

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 // import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip'; // Removed complex tooltip
 import { Avatar, AvatarFallback, AvatarImage } from './avatar';
-import { clsx } from 'clsx';
+// Remove unused imports
 
 interface DashboardHeaderProps {
   userName: string;

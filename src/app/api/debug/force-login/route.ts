@@ -37,13 +37,12 @@ export async function GET(request: NextRequest) {
     // Set the session cookie
     return setTokenCookie(response, token);
     
-  } catch (error: any) {
-    console.error('Error in force login endpoint:', error);
-    
-    return NextResponse.json({
-      error: 'Failed to create debug session',
-      message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    }, { status: 500 });
+  } catch (error: unknown) {
+    console.error('Error in force login:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json(
+      { error: 'Force login failed', details: message },
+      { status: 500 }
+    );
   }
 } 

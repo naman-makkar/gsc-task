@@ -94,25 +94,26 @@ export async function POST(request: NextRequest) {
       }
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching GSC data:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
     
     // Handle specific errors
-    if (error.message?.includes('auth') || error.code === 401) {
+    if (message?.includes('auth') || message === 'Authentication failed') {
       return NextResponse.json(
         { error: 'Authentication failed' },
         { status: 401 }
       );
     }
     
-    if (error.message?.includes('permissions') || error.code === 403) {
+    if (message?.includes('permissions') || message === 'Insufficient permissions to access this site') {
       return NextResponse.json(
         { error: 'Insufficient permissions to access this site' },
         { status: 403 }
       );
     }
     
-    if (error.message?.includes('quota') || error.code === 429) {
+    if (message?.includes('quota') || message === 'API quota exceeded. Please try again later') {
       return NextResponse.json(
         { error: 'API quota exceeded. Please try again later' },
         { status: 429 }
@@ -120,7 +121,7 @@ export async function POST(request: NextRequest) {
     }
     
     return NextResponse.json(
-      { error: 'Failed to fetch GSC data', details: error.message },
+      { error: 'Failed to fetch GSC data', details: message },
       { status: 500 }
     );
   }

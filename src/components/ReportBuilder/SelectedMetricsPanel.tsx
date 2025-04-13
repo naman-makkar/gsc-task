@@ -4,7 +4,6 @@ import React from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useReportBuilder } from '@/context/ReportBuilderContext';
-import { DraggableMetric } from './DraggableMetric';
 import { SortableMetric } from './SortableMetric';
 
 export const SelectedMetricsPanel: React.FC = () => {

@@ -61,9 +61,10 @@ export default function ReportListPage() {
         const reportsData = await reportsResponse.json();
         setReports(reportsData.success && reportsData.reports ? reportsData.reports : []);
 
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Reports page fetch error:", err);
-        setError(err.message || 'Failed to load page data');
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        setError(message || 'Failed to load page data');
       } finally {
         setIsLoading(false);
       }
@@ -92,7 +93,7 @@ export default function ReportListPage() {
     try {
       await fetch('/api/auth/logout');
       router.push('/');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Logout failed:", error);
     }
   };
@@ -199,7 +200,7 @@ export default function ReportListPage() {
               <FileText className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" strokeWidth={1} />
               <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-200">No reports found</h3>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                You haven't generated any reports yet.
+                You haven&apos;t generated any reports yet.
               </p>
               <div className="mt-6">
                 <Link
@@ -224,7 +225,7 @@ export default function ReportListPage() {
                     variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }}
                   >
                     <Link
-                      href={`/dashboard/report-results?reportId=${report.reportId}`}
+                      href={`/dashboard/report-results?reportId=${report.id}`}
                       className="block hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors duration-150"
                     >
                       <div className="px-4 py-4 sm:px-6">

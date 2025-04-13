@@ -26,6 +26,7 @@ export interface IntentAnalysis {
   category?: string; // e.g., "SEO Software", "Travel Tips", "Local Restaurant"
   funnel_stage?: FunnelStage;
   main_keywords?: string[];
+  error?: string;
 }
 
 /**
@@ -36,76 +37,23 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 /**
  * Default analysis result for fallbacks
  */
-const defaultAnalysis = (query: string): IntentAnalysis => ({
+const defaultAnalysis = (query: string, error?: string): IntentAnalysis => ({
   query,
   intent: 'Unknown',
   category: 'Unknown',
   funnel_stage: 'Unknown',
   main_keywords: [],
+  error,
 });
-
-/**
- * Analyzes a single query intent with richer analysis
- */
-async function analyzeSingleQuery(query: string, model: any, maxRetries = 3): Promise<IntentAnalysis> {
-  let retries = 0;
-  while (retries <= maxRetries) {
-    try {
-      const prompt = `
-        Analyze the following search query for SEO insights:
-        Query: "${query}"
-
-        Provide your analysis in JSON format with the following fields:
-        - "intent": Classify into ONE: Informational, Navigational, Transactional, Commercial Investigation, Mixed, Unknown.
-        - "category": A brief descriptor of the topic (e.g., "DIY Home Repair", "JavaScript Frameworks", "Luxury Hotels").
-        - "funnel_stage": Classify into ONE: Awareness, Consideration, Decision, Post-Purchase, Unknown.
-        - "main_keywords": An array of the 1-3 most important keywords or entities in the query.
-
-        Example Response:
-        {
-          "intent": "Informational",
-          "category": "Recipe",
-          "funnel_stage": "Awareness",
-          "main_keywords": ["chocolate chip cookie recipe"]
-        }
-        
-        Output ONLY the JSON object.
-      `;
-      const result = await model.generateContent(prompt);
-      const response = result.response;
-      let jsonString = response.text().trim();
-      jsonString = jsonString.replace(/^```json\n?/, '').replace(/\n?```$/, '');
-      
-      const analysis = JSON.parse(jsonString) as Omit<IntentAnalysis, 'query'>;
-
-      // Basic validation
-      if (!analysis.intent || !analysis.category || !analysis.funnel_stage || !analysis.main_keywords) {
-          throw new Error('Model response missing required fields.')
-      }
-
-      return { query, ...analysis };
-    } catch (error: any) {
-      const isRateLimit = error.message?.includes('429') || 
-                          error.message?.includes('Too Many Requests') ||
-                          error.status === 429;
-      if (isRateLimit && retries < maxRetries) {
-        const backoffTime = Math.pow(2, retries + 2) * 1000;
-        console.log(`Rate limit hit for single query. Retrying in ${backoffTime/1000}s...`);
-        await sleep(backoffTime);
-        retries++;
-      } else {
-        console.error(`Error analyzing query "${query}":`, error);
-        return defaultAnalysis(query); // Fallback on error
-      }
-    }
-  }
-  return defaultAnalysis(query); // Fallback if all retries fail
-}
 
 /**
  * Analyzes a batch of queries using a single prompt asking for rich JSON output
  */
-async function analyzeMultipleQueriesWithSinglePrompt(queries: string[], model: any, maxRetries = 3): Promise<IntentAnalysis[]> {
+async function analyzeMultipleQueriesWithSinglePrompt(
+  queries: string[], 
+  model: any, // Keep any for external library model type for now
+  maxRetries = 3
+): Promise<IntentAnalysis[]> {
   let retries = 0;
   const queriesJson = JSON.stringify(queries);
 
@@ -154,10 +102,10 @@ async function analyzeMultipleQueriesWithSinglePrompt(queries: string[], model: 
       });
 
       return finalResults;
-    } catch (error: any) {
-      const isRateLimit = error.message?.includes('429') || 
-                          error.message?.includes('Too Many Requests') ||
-                          error.status === 429;
+    } catch (error: unknown) {
+      const isRateLimit = error instanceof Error && error.message?.includes('429') || 
+                          error instanceof Error && error.message?.includes('Too Many Requests') ||
+                          typeof error === 'object' && error !== null && 'status' in error && error.status === 429;
 
       if (isRateLimit && retries < maxRetries) {
         const backoffTime = Math.pow(2, retries + 2) * 1000;
@@ -181,7 +129,9 @@ async function analyzeMultipleQueriesWithSinglePrompt(queries: string[], model: 
  */
 export async function batchAnalyzeIntents(
   queries: string[],
-  batchSize: number = 1 // Set to 0 to use single-prompt mode
+  batchSize: number = 5,
+  maxRetries: number = 3,
+  initialDelay: number = 1000
 ): Promise<IntentAnalysis[]> {
   if (!process.env.GEMINI_API_KEY) {
     console.error('Error: GEMINI_API_KEY is not defined');
@@ -193,33 +143,51 @@ export async function batchAnalyzeIntents(
 
   const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-  // Single-prompt mode: Analyze all queries in one go
-  if (batchSize === 0) {
-    console.log(`Analyzing ${uniqueQueries.length} queries using single-prompt mode.`);
-    return analyzeMultipleQueriesWithSinglePrompt(uniqueQueries, model);
-  }
+  const allResults: IntentAnalysis[] = [];
+  let currentBatch: string[] = [];
 
-  // Batch mode: Process queries in smaller batches
-  const results: IntentAnalysis[] = [];
-  console.log(`Analyzing ${uniqueQueries.length} queries in batches of ${batchSize}.`);
-  
-  for (let i = 0; i < uniqueQueries.length; i += batchSize) {
-    const batch = uniqueQueries.slice(i, i + batchSize);
-    console.log(`Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(uniqueQueries.length/batchSize)}...`);
-    
-    const batchPromises = batch.map(query => analyzeSingleQuery(query, model));
-    const batchResults = await Promise.all(batchPromises);
-    results.push(...batchResults);
-    
-    console.log(`Finished batch ${Math.floor(i/batchSize) + 1}. Processed ${results.length}/${uniqueQueries.length} queries.`);
-    
-    // Add delay between batches if not the last batch
-    if (i + batchSize < uniqueQueries.length) {
-      const delayMs = 3000; // 3 seconds
-      console.log(`Waiting ${delayMs/1000}s before next batch...`);
-      await sleep(delayMs);
+  for (let i = 0; i < queries.length; i++) {
+    currentBatch.push(queries[i]);
+
+    if (currentBatch.length === batchSize || i === queries.length - 1) {
+      console.log(`Analyzing batch of ${currentBatch.length} queries...`);
+      let retries = 0;
+      let delay = initialDelay;
+      let success = false;
+      
+      while (retries < maxRetries && !success) {
+        try {
+          const batchResults = await analyzeMultipleQueriesWithSinglePrompt(currentBatch, model);
+          allResults.push(...batchResults);
+          success = true;
+          console.log(`Batch analysis successful (attempt ${retries + 1})`);
+        } catch (error: unknown) {
+          retries++;
+          console.error(`Batch analysis attempt ${retries} failed:`, error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+
+          if (errorMessage.includes('Rate limit exceeded') || errorMessage.includes('429')) {
+            if (retries >= maxRetries) {
+              console.error(`Rate limit hit, max retries (${maxRetries}) reached for batch. Skipping.`);
+              // Add default error analysis for each query in the failed batch
+              allResults.push(...currentBatch.map(q => defaultAnalysis(q, 'Rate Limit Exceeded')));
+              break; // Exit retry loop for this batch
+            }
+            delay = Math.min(delay * 2, 30000); // Exponential backoff, max 30 seconds
+            console.log(`Rate limit likely hit, retrying batch in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          } else {
+            // For non-rate-limit errors, fail the batch immediately
+            console.error('Non-retriable error encountered for batch. Skipping.');
+            allResults.push(...currentBatch.map(q => defaultAnalysis(q, 'Analysis Error')));
+            break; // Exit retry loop for this batch
+          }
+        }
+      }
+      // Reset batch for next iteration
+      currentBatch = [];
     }
   }
-  
-  return results;
+
+  return allResults;
 } 

@@ -111,7 +111,7 @@ export default function Dashboard() {
     try {
       await fetch('/api/auth/logout');
       router.push('/');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Logout failed:", error);
       // Handle logout error display if necessary
     }

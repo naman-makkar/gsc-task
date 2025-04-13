@@ -1,4 +1,4 @@
-import { google } from 'googleapis';
+import { google, sheets_v4, searchconsole_v1 } from 'googleapis';
 import { supabaseAdmin } from './supabase';
 import { getSupabase } from './supabase';
 
@@ -9,6 +9,13 @@ interface GoogleTokens {
   expiry_date?: number;
   expires_in?: number;
   scope?: string;
+}
+
+// Define a more specific type for the token credentials if possible
+interface RefreshedCredentials {
+  access_token?: string | null;
+  expires_in?: number | null;
+  // Add other expected properties if known
 }
 
 // Google OAuth2 client setup
@@ -115,13 +122,14 @@ export async function getValidAccessToken(userId: string): Promise<string> {
     });
     
     const { credentials } = await oauth2Client.refreshAccessToken();
+    const refreshedCreds = credentials as RefreshedCredentials; // Type assertion
     
     // Update tokens in database
     const { error: updateError } = await supabase
       .from('tokens')
       .update({
-        access_token: credentials.access_token,
-        expiry_date: new Date(Date.now() + (credentials as any).expires_in * 1000 || 3600 * 1000).toISOString()
+        access_token: refreshedCreds.access_token,
+        expiry_date: new Date(Date.now() + (refreshedCreds.expires_in || 3600) * 1000).toISOString()
       })
       .eq('user_id', userId);
     
@@ -130,7 +138,7 @@ export async function getValidAccessToken(userId: string): Promise<string> {
       throw new Error('Failed to update tokens');
     }
     
-    return credentials.access_token as string;
+    return refreshedCreds.access_token as string;
   } catch (error) {
     console.error('Failed to refresh access token:', error);
     throw new Error('Failed to refresh access token');
@@ -167,7 +175,7 @@ export async function querySearchAnalytics(
   dimensions: string[] = ['query'],
   rowLimit: number = 1000,
   startRow: number = 0
-): Promise<any> {
+): Promise<searchconsole_v1.Schema$ApiDataRow[] | undefined> {
   try {
     // Get a valid access token
     const accessToken = await getValidAccessToken(userId);
@@ -201,10 +209,10 @@ export async function querySearchAnalytics(
       requestBody
     });
     
-    const rows = response.data.rows || [];
+    const rows = response.data.rows;
     
     // Check if we need to paginate
-    if (rows.length === rowLimit) {
+    if (rows && rows.length === rowLimit) {
       // There might be more data, fetch next page
       const nextPageRows = await querySearchAnalytics(
         userId,
@@ -216,24 +224,25 @@ export async function querySearchAnalytics(
         startRow + rowLimit
       );
       
-      // Combine results
-      return [...rows, ...nextPageRows];
+      // Combine results, handling potential undefined nextPageRows
+      return [...rows, ...(nextPageRows || [])];
     }
     
     return rows;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error querying Search Console API:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
     
     // Handle specific API errors
-    if (error.code === 401) {
+    if (message === 'Authentication failed. Please re-authorize the application.') {
       throw new Error('Authentication failed. Please re-authorize the application.');
-    } else if (error.code === 403) {
+    } else if (message === 'Insufficient permissions to access Search Console data for this site.') {
       throw new Error('Insufficient permissions to access Search Console data for this site.');
-    } else if (error.code === 429) {
+    } else if (message === 'GSC API quota exceeded. Please try again later.') {
       throw new Error('GSC API quota exceeded. Please try again later.');
     }
     
-    throw new Error(`Failed to query GSC data: ${error.message}`);
+    throw new Error(`Failed to query GSC data: ${message}`);
   }
 }
 
@@ -247,7 +256,7 @@ export async function fetchSearchAnalyticsData(
   endDate: string,
   metrics: string[],
   dimensions: string[] = ['query']
-): Promise<any> {
+): Promise<searchconsole_v1.Schema$ApiDataRow[] | undefined> {
   const supabase = getSupabase();
   
   // Create a cache key based on the request parameters
@@ -281,17 +290,22 @@ export async function fetchSearchAnalyticsData(
     endDate,
     dimensions
   );
+
+  if (!gscData) { // Handle case where querySearchAnalytics returns undefined
+      console.warn('querySearchAnalytics returned undefined data.');
+      return undefined; 
+  }
   
   // Filter to include only requested metrics in the response
-  const filteredData = gscData.map((row: any) => {
-    const filteredRow: any = {
+  const filteredData = gscData.map((row: searchconsole_v1.Schema$ApiDataRow) => { // Use specific type for row
+    const filteredRow: Record<string, any> = {
       keys: row.keys
     };
     
     // Include only requested metrics
     metrics.forEach((metric) => {
-      if (row[metric] !== undefined) {
-        filteredRow[metric] = row[metric];
+      if (row[metric as keyof searchconsole_v1.Schema$ApiDataRow] !== undefined) { // Type assertion for metric key
+        filteredRow[metric] = row[metric as keyof searchconsole_v1.Schema$ApiDataRow];
       }
     });
     
@@ -304,7 +318,7 @@ export async function fetchSearchAnalyticsData(
     .upsert({
       user_id: userId,
       cache_key: cacheKey,
-      data: filteredData,
+      data: filteredData as Record<string, unknown>[], // Use Record<string, unknown>[] for data type
       created_at: new Date().toISOString()
     });
   
@@ -313,5 +327,58 @@ export async function fetchSearchAnalyticsData(
     // Continue anyway, as this is not critical
   }
   
-  return filteredData;
+  return filteredData as searchconsole_v1.Schema$ApiDataRow[]; // Assert final type
+}
+
+// Function to create a new Google Sheet
+export async function createGoogleSheet(userId: string, title: string): Promise<string | undefined> {
+    try {
+        const accessToken = await getValidAccessToken(userId);
+        const oauth2Client = getOAuth2Client();
+        oauth2Client.setCredentials({ access_token: accessToken });
+
+        const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
+
+        const spreadsheet = await sheets.spreadsheets.create({
+            requestBody: {
+                properties: {
+                    title: title,
+                },
+            },
+        });
+
+        return spreadsheet.data.spreadsheetId ?? undefined; // Handle potential null/undefined
+    } catch (error: unknown) {
+        console.error('Error creating Google Sheet:', error);
+        throw error; // Re-throw for the API route to handle
+    }
+}
+
+// Function to write data to a Google Sheet
+export async function writeToGoogleSheet(
+    userId: string, 
+    spreadsheetId: string, 
+    data: (string | number | null)[][] // Use more specific type for data
+): Promise<sheets_v4.Schema$UpdateValuesResponse | null> { // Use specific return type
+    try {
+        const accessToken = await getValidAccessToken(userId);
+        const oauth2Client = getOAuth2Client();
+        oauth2Client.setCredentials({ access_token: accessToken });
+
+        const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
+
+        const response = await sheets.spreadsheets.values.update({
+            spreadsheetId: spreadsheetId,
+            range: 'Sheet1!A1', // Assuming data starts at A1 of Sheet1
+            valueInputOption: 'USER_ENTERED',
+            requestBody: {
+                values: data,
+            },
+        });
+
+        return response.data;
+    } catch (error: unknown) {
+        console.error('Error writing to Google Sheet:', error);
+        throw error; // Re-throw for the API route to handle
+    }
 } 
