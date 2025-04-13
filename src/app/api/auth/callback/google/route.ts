@@ -50,6 +50,8 @@ export async function GET(request: NextRequest) {
         email: userInfo.email,
         name: userInfo.name || '',
         avatar_url: userInfo.picture || '',
+      }, {
+        onConflict: 'email',
       })
       .select('id')
       .single();
