@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 // import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip'; // Removed complex tooltip
 import { Avatar, AvatarFallback, AvatarImage } from './avatar';
 import { clsx } from 'clsx';
@@ -14,12 +15,19 @@ interface DashboardHeaderProps {
 }
 
 const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userName, userEmail, avatarUrl, onLogout }) => {
+  const pathname = usePathname();
+
   // Log the received avatarUrl prop
   console.log('DashboardHeader - Received avatarUrl:', avatarUrl);
 
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   };
+
+  // Define styles for active/inactive links
+  const baseLinkClasses = "relative px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ease-in-out";
+  const activeLinkClasses = "text-gray-900 dark:text-white after:content-[''] after:absolute after:left-0 after:bottom-0 after:h-0.5 after:w-full after:bg-blue-600";
+  const inactiveLinkClasses = "text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700";
 
   return (
     <nav className="bg-white dark:bg-gray-900 shadow sticky top-0 z-10">
@@ -34,14 +42,21 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userName, userEmail, 
             <div className="ml-6 flex space-x-4">
               <Link
                 href="/dashboard"
-                className="relative px-3 py-2 rounded-md text-sm font-medium text-gray-900 dark:text-white after:content-[''] after:absolute after:left-0 after:bottom-0 after:h-0.5 after:w-full after:bg-blue-600"
+                className={clsx(
+                  baseLinkClasses,
+                  // Apply active styles if path is exactly /dashboard
+                  pathname === '/dashboard' ? activeLinkClasses : inactiveLinkClasses
+                )}
               >
                 Dashboard
               </Link>
-              {/* Enabled Reports link */}
               <Link
                 href="/dashboard/reports"
-                className="px-3 py-2 rounded-md text-sm font-medium text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200 ease-in-out"
+                className={clsx(
+                  baseLinkClasses,
+                  // Apply active styles if path starts with /dashboard/reports
+                  pathname.startsWith('/dashboard/reports') ? activeLinkClasses : inactiveLinkClasses
+                )}
               >
                 Reports
               </Link>
